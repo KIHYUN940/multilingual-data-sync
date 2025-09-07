@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Excel Uploader</title>
+</head>
+<body>
+<h1>Firebase Excel Uploader</h1>
+<button id="uploadBtn">Upload Excel to Firebase</button>
+<p id="status"></p>
+
+<script>
+    const btn = document.getElementById("uploadBtn");
+    const status = document.getElementById("status");
+
+    btn.addEventListener("click", async () => {
+      status.textContent = "Uploading...";
+      try {
+        const res = await fetch("/upload", { method: "POST" });
+        const data = await res.json();
+        status.textContent = data.message || "Upload finished!";
+      } catch (err) {
+        console.error(err);
+        status.textContent = "Error uploading data";
+      }
+    });
+</script>
+</body>
+</html>
