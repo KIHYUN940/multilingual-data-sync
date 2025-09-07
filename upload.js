@@ -55,3 +55,4 @@ async function uploadData() {
 uploadData()
   .then(() => console.log("\nAll data uploaded!"))
   .catch((err) => console.error("Error uploading data:", err));
+
