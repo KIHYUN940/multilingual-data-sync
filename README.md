@@ -67,7 +67,7 @@ const FIRESTORE_PROJECT = "your-project-id";  // Firebase 프로젝트 ID
 const COLLECTION = "translations";            // Firestore 컬렉션 이름
 const SERVICE_ACCOUNT_FILE_ID = "YOUR_FILE_ID"; // Drive에 업로드한 serviceAccountKey.json ID
 
-'''
+```
 ---
 
 ## 5. 실행 방법
