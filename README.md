@@ -84,7 +84,10 @@ Google Sheets 메뉴에서 `Firestore Sync → Sync Sheets to Firestore` 클릭
 - **Firestore 문서 ID 자동 보정** → 허용되지 않는 문자(`/`, `#`, `[]`, 공백, 한글 등) 제거  
 - **Service Account Key 보안 처리** → Google Drive에서 안전하게 로드  
 - **토큰 캐싱 지원** → Access Token 재발급 최소화  
-- **동기화 완료 시 알림 표시**  
+- **동기화 완료 시 알림 표시**
+- **공유받은 사용자도 동기화 가능**  
+  - 처음 실행 시 **권한 승인 절차**가 필요함  
+  - 승인 후에는 공유 계정도 동일하게 버튼을 눌러 Firestore 동기화 가능
 
 ---
 
@@ -92,4 +95,18 @@ Google Sheets 메뉴에서 `Firestore Sync → Sync Sheets to Firestore` 클릭
 - ⚠️ Firestore 문서 ID에는 일부 문자가 허용되지 않음 → 자동 변환됨  
 - ⚠️ Key 중복 시 마지막 데이터가 덮어씌워짐  
 - ⚠️ Apps Script의 `UrlFetchApp` 호출 제한(분당 30회)을 고려해야 함  
+- ⚠️ 공유받은 사용자는 처음 실행 시 권한 승인 팝업이 표시됨  
+  - 이 승인은 **Apps Script가 Google Drive/Firestore API에 접근하는 것을 허용하기 위함**  
+  - 한 번 승인하면 이후에는 추가 승인 없이 버튼 실행 가능  
+
+---
+
+## 8. 공유 계정 동작 흐름
+1. 시트 소유자가 Apps Script를 작성하고, `serviceAccountKey.json`을 Drive에 업로드  
+2. 시트를 다른 사용자와 공유  
+3. 공유받은 사용자가 `Firestore Sync → Sync Sheets to Firestore` 메뉴 클릭  
+4. **최초 실행 시** → 권한 승인 요청 (Google API 사용 허용)  
+5. **승인 후** → 공유 계정도 동일하게 Firestore에 동기화 가능  
+
+---
 
