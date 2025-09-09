@@ -85,9 +85,9 @@ Google Sheets 메뉴에서 `Firestore Sync → Sync Sheets to Firestore` 클릭
 - **Service Account Key 보안 처리** → Google Drive에서 안전하게 로드  
 - **토큰 캐싱 지원** → Access Token 재발급 최소화  
 - **동기화 완료 시 알림 표시**
-- **공유받은 사용자도 동기화 가능**  
-  - 처음 실행 시 **권한 승인 절차**가 필요함  
-  - 승인 후에는 공유 계정도 동일하게 버튼을 눌러 Firestore 동기화 가능
+- **공유 계정도 동기화 가능**  
+  - 최초 실행 시 Google Drive/Spreadsheet 접근 권한 승인 필요  
+  - 승인 후에는 공유 계정이 버튼을 눌러도 Firestore에 데이터 저장 가능 (실제 DB 접근 권한은 serviceAccount 사용)
 
 ---
 
