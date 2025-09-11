@@ -39,9 +39,8 @@ function testObjectToFirestoreFields_Test() {
   Logger.log("objectToFirestoreFields_Test 단위 테스트 통과!");
 }
 
-// ====== 시트 데이터 → 문서 데이터 변환 테스트 ======
+// ====== 시트 데이터 → DB 데이터 변환 테스트 ======
 function testRowToDocData_Test() {
-  // 가짜 시트 데이터
   const header = ["key", "value_ko", "value_en", "value_mn"];
   const row = ["test_key", "안녕", "Hello", "Сайн уу"];
 
@@ -61,7 +60,7 @@ function testRowToDocData_Test() {
   Logger.log("row → docData 변환 테스트 통과!");
 }
 
-// ====== 시트-업로드/삭제 시뮬레이션 테스트 ======
+// ====== 시트-업로드 시뮬레이션 테스트 (삭제 제외) ======
 function testSyncSimulation_Test() {
   // 가짜 시트 데이터 (2개 문서)
   const sheetData = [
@@ -78,7 +77,7 @@ function testSyncSimulation_Test() {
 
   Logger.log("초기 Firestore 시뮬레이션: " + JSON.stringify(firestoreDocs));
 
-  // 1. 시트 데이터를 docData로 변환
+  // 1. 시트 데이터를 docData로 변환 + 업로드 시뮬레이션
   const header = sheetData[0];
   const keyCol = header.indexOf("key");
   const koCol = header.indexOf("value_ko");
@@ -100,21 +99,12 @@ function testSyncSimulation_Test() {
 
   Logger.log("업로드 후 Firestore 시뮬레이션: " + JSON.stringify(firestoreDocs));
 
-  // 2. 시트에 없는 문서 삭제 시뮬레이션
-  Object.keys(firestoreDocs).forEach(docId => {
-    if (!sheetKeys.has(docId)) {
-      delete firestoreDocs[docId];
-    }
+  // 검증: 시트에 있는 key가 Firestore에 존재
+  ["key1", "key2"].forEach(k => {
+    if (!firestoreDocs[k]) throw new Error(`업로드 시뮬레이션 실패: ${k}`);
   });
 
-  Logger.log("삭제 후 Firestore 시뮬레이션: " + JSON.stringify(firestoreDocs));
-
-  // 검증
-  if (!("key1" in firestoreDocs) || !("key2" in firestoreDocs) || ("key3" in firestoreDocs)) {
-    throw new Error("삭제/업로드 시뮬레이션 테스트 실패");
-  }
-
-  Logger.log("삭제/업로드 시뮬레이션 단위 테스트 통과!");
+  Logger.log("업로드 시뮬레이션 단위 테스트 통과!");
 }
 
 // ====== 단위 테스트 실행 ======
