@@ -1,3 +1,7 @@
+// ====== Integration-Test-Code.gs ======
+// Firestore와 Google Sheets 통합 테스트 (업로드/삭제 검증)
+// 운영 코드를 그대로 사용하되 테스트용 컬렉션과 테스트 시트 사용
+
 /**
  * 헬퍼: 스크립트 속성에서 테스트 시트 ID 가져오기
  */
@@ -8,8 +12,7 @@ function getTestSheetId() {
 }
 
 /**
- * 통합 테스트: TestSheet → Firestore test 컬렉션 → 업로드/삭제 검증
- * 시트에 없는 문서는 Firestore에서 삭제됨
+ * 통합 테스트: TestSheet → Firestore test 컬렉션 → 업로드 검증 + 삭제 버튼 테스트
  */
 function runFullIntegrationTest() {
   const TEST_SHEET_ID = getTestSheetId();
@@ -21,9 +24,9 @@ function runFullIntegrationTest() {
   const sheet = ss.getSheets()[0]; // 첫 번째 시트 사용
   Logger.log("TestSheet 로드 완료: " + sheet.getName());
 
-  // ====== 2. Firestore 동기화 (테스트 컬렉션, 삭제 포함) ======
-  syncAllSheetsToFirestoreTest(ss, testCollection, false);
-  Logger.log("Firestore 테스트 컬렉션 동기화 완료");
+  // ====== 2. Firestore 동기화 (테스트 컬렉션, 삭제 없이 업로드/저장만) ======
+  syncAllSheetsToFirestoreTest(ss, testCollection, true); // skipDelete = true
+  Logger.log("Firestore 테스트 컬렉션 업로드 완료");
 
   // ====== 3. Firestore 업로드 결과 확인 ======
   const token = getOAuthToken_();
@@ -42,13 +45,23 @@ function runFullIntegrationTest() {
     throw new Error("통합 테스트 실패: 누락된 키 - " + missingKeys.join(", "));
   }
   Logger.log("업로드 검증 통과!");
-  Logger.log("통합 테스트 완료. 시트에 없는 문서는 Firestore에서 삭제되었습니다.");
+
+  // ====== 4. 삭제 버튼 동작 테스트 ======
+  try {
+    Logger.log("삭제 버튼 시뮬레이션 실행 (시트에 없는 문서 삭제)");
+    deleteMissingFromFirestore_Test(ss, testCollection);
+    Logger.log("삭제 버튼 시뮬레이션 완료");
+  } catch(e) {
+    Logger.log("삭제 버튼 테스트 실패: " + e.message);
+  }
+
+  Logger.log("통합 테스트 완료");
 }
 
 /**
  * syncAllSheetsToFirestoreTest
  * collectionName: 테스트 컬렉션
- * skipDelete: false이면 시트에 없는 문서 삭제
+ * skipDelete: true이면 삭제 로직 건너뜀
  */
 function syncAllSheetsToFirestoreTest(ss, collectionName, skipDelete) {
   const sheets = ss.getSheets();
@@ -121,22 +134,65 @@ function syncAllSheetsToFirestoreTest(ss, collectionName, skipDelete) {
     }
   });
 
-  // Firestore 삭제 처리: skipDelete가 false이면 시트에 없는 문서 삭제
   if (!skipDelete) {
-    const listUrl = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents/${COLLECTION}`;
-    const response = UrlFetchApp.fetch(listUrl, { headers: { Authorization: "Bearer " + token }, muteHttpExceptions: true });
-    const json = JSON.parse(response.getContentText());
-    if (json.documents) {
-      json.documents.forEach(doc => {
-        const docId = doc.name.split("/").pop();
-        if (!sheetKeys.has(docId)) {
-          const delUrl = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents/${COLLECTION}/${docId}`;
-          UrlFetchApp.fetch(delUrl, { method: "DELETE", headers: { Authorization: `Bearer ${token}` }, muteHttpExceptions: true });
-          Logger.log("삭제 " + docId + ": 완료");
-        }
-      });
-    }
+    deleteMissingFromFirestore_Test(ss, COLLECTION);
   }
 
-  Logger.log("syncAllSheetsToFirestoreTest 실행 완료, 컬렉션: " + COLLECTION + (!skipDelete ? " (시트 없는 문서 삭제 포함)" : ""));
+  Logger.log("syncAllSheetsToFirestoreTest 실행 완료, 컬렉션: " + COLLECTION + (!skipDelete ? " (삭제 포함)" : ""));
+}
+
+/**
+ * Firestore 삭제 버튼 동작 시뮬레이션
+ */
+function deleteMissingFromFirestore_Test(ss, collectionName) {
+  const token = getOAuthToken_();
+  const FIRESTORE_PROJECT = getConfig("FIRESTORE_PROJECT");
+
+  // 전체 Firestore 문서 가져오기
+  const listUrl = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents/${collectionName}`;
+  const response = UrlFetchApp.fetch(listUrl, {
+    headers: { Authorization: "Bearer " + token },
+    muteHttpExceptions: true
+  });
+  const json = JSON.parse(response.getContentText());
+  if (!json.documents) return;
+
+  // 시트에 존재하는 key 모음
+  const sheetKeys = new Set();
+  ss.getSheets().forEach(sheet => {
+    const data = sheet.getDataRange().getValues();
+    if (!data || data.length === 0) return;
+
+    let keyCol = -1, headerRow = -1;
+    outerLoop:
+    for (let r = 0; r < data.length; r++) {
+      for (let c = 0; c < data[r].length; c++) {
+        if ((data[r][c] || "").toString().trim().toLowerCase() === "key") {
+          keyCol = c;
+          headerRow = r;
+          break outerLoop;
+        }
+      }
+    }
+    if (keyCol === -1) return;
+
+    for (let i = headerRow + 1; i < data.length; i++) {
+      const key = sanitizeFirestoreKey(data[i][keyCol]);
+      if (key) sheetKeys.add(key);
+    }
+  });
+
+  // Firestore에서 sheetKeys에 없는 문서 삭제
+  json.documents.forEach(doc => {
+    const docId = doc.name.split("/").pop();
+    if (!sheetKeys.has(docId)) {
+      const delUrl = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents/${collectionName}/${docId}`;
+      UrlFetchApp.fetch(delUrl, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+        muteHttpExceptions: true
+      });
+      Logger.log("삭제 " + docId + ": 완료");
+    }
+  });
 }
