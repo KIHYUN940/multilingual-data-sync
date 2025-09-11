@@ -31,7 +31,7 @@ function runFullIntegrationTest() {
   const listUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${testCollection}`;
   const res = UrlFetchApp.fetch(listUrl, { headers: { Authorization: "Bearer " + token } });
   const docs = JSON.parse(res.getContentText()).documents || [];
-  let keys = docs.map(d => d.name.split("/").pop());
+  const keys = docs.map(d => d.name.split("/").pop());
   Logger.log("Firestore 최종 문서: " + JSON.stringify(keys));
 
   // 검증: 시트에 있는 모든 키가 Firestore에 있어야 함
@@ -42,8 +42,7 @@ function runFullIntegrationTest() {
     throw new Error("통합 테스트 실패: 누락된 키 - " + missingKeys.join(", "));
   }
   Logger.log("업로드 검증 통과!");
-
-  SpreadsheetApp.getUi().alert("통합 테스트 완료. 시트에 없는 문서는 Firestore에서 삭제되었습니다.");
+  Logger.log("통합 테스트 완료. 시트에 없는 문서는 Firestore에서 삭제되었습니다.");
 }
 
 /**
@@ -62,6 +61,7 @@ function syncAllSheetsToFirestoreTest(ss, collectionName, skipDelete) {
     const data = sheet.getDataRange().getValues();
     if (!data || data.length === 0) return;
 
+    // 키 컬럼 탐색
     let keyCol = -1, headerRow = -1;
     outerLoop:
     for (let r = 0; r < data.length; r++) {
@@ -80,9 +80,10 @@ function syncAllSheetsToFirestoreTest(ss, collectionName, skipDelete) {
     const enCol = header.findIndex(h => (h || "").toString().trim().toLowerCase() === "value_en");
     const mnCol = header.findIndex(h => (h || "").toString().trim().toLowerCase() === "value_mn");
 
+    // Firestore 업로드
     for (let i = headerRow + 1; i < data.length; i++) {
       const row = data[i];
-      let key = sanitizeFirestoreKey(row[keyCol]);
+      const key = sanitizeFirestoreKey(row[keyCol]);
       if (!key) continue;
       sheetKeys.add(key);
 
