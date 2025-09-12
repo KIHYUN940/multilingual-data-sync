@@ -1,5 +1,5 @@
 /**
- * Firestore와 Google Sheets 동기화 (웹앱 + 소유자 권한 실행)
+ * Firestore와 Google Sheets 부분 동기화 (변경 감지 + 웹앱 + 소유자 권한)
  * 공유 계정도 버튼을 눌러 동기화 가능
  * 민감 정보는 Script Properties 환경변수에서 가져와 안전하게 처리
  */
@@ -11,7 +11,6 @@
 // SERVICE_ACCOUNT_FILE_ID = your-service-account-file-id
 // WEBAPP_URL = your-webapp-url
 
-// ====== 헬퍼: 환경변수 가져오기 ======
 function getConfig(key) {
   const props = PropertiesService.getScriptProperties();
   const value = props.getProperty(key);
@@ -19,85 +18,49 @@ function getConfig(key) {
   return value;
 }
 
-// ====== 시트 메뉴 생성 ======
+// ====== 시트 메뉴 ======
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("Firestore Sync")
-    .addItem("Sync Sheets to Firestore", "triggerSync")
+    .addItem("Sync Changed Rows", "triggerChangedSync")
     .addItem("Delete Missing Data", "triggerDelete")
     .addToUi();
 }
 
-// ====== 메뉴 클릭 시 Firestore 동기화 ======
-function triggerSync() {
+// ====== 메뉴 클릭 시 변경된 행만 동기화 ======
+function triggerChangedSync() {
   const ui = SpreadsheetApp.getUi();
   const response = ui.alert(
-    "Firestore 동기화",
-    "시트 내용을 Firestore에 동기화하시겠습니까?",
+    "Firestore 부분 동기화",
+    "변경된 행만 Firestore에 동기화하시겠습니까?",
     ui.ButtonSet.YES_NO
   );
   if (response !== ui.Button.YES) return;
 
   try {
-    const ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
-    const payload = { sheetId: ssId };
-    const WEBAPP_URL = getConfig("WEBAPP_URL");
-
-    const res = UrlFetchApp.fetch(WEBAPP_URL, {
-      method: "post",
-      contentType: "application/json",
-      payload: JSON.stringify(payload),
-      muteHttpExceptions: true
-    });
-
-    const code = res.getResponseCode();
-    const content = res.getContentText();
-
-    Logger.log("HTTP Code: " + code);
-    Logger.log("Response: " + content);
-
-    let json;
-    try {
-      json = JSON.parse(content);
-    } catch(e) {
-      ui.alert("동기화 실패: 서버가 JSON이 아닌 값을 반환했습니다.\n" + content);
-      return;
-    }
-
-    if (code === 200 && json.status === "success") {
-      ui.alert("Firestore 동기화 완료!");
-    } else {
-      ui.alert("동기화 실패: " + (json.error || content));
-    }
-
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    syncChangedRows(ss);
+    ui.alert("변경 감지 동기화 완료!");
   } catch (err) {
-    ui.alert("동기화 요청 실패: " + err.message);
+    ui.alert("동기화 실패: " + err.message);
   }
 }
 
-// ====== 웹앱 GET → 테스트용 ======
-function doGet() {
-  return ContentService.createTextOutput(
-    JSON.stringify({ status: "ready", message: "POST 요청으로 시트를 동기화하세요." })
-  ).setMimeType(ContentService.MimeType.JSON);
-}
+// ====== 메뉴 클릭 시 삭제 ======
+function triggerDelete() {
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.alert(
+    "Firestore 삭제",
+    "시트에 없는 Firestore 데이터를 삭제하시겠습니까?",
+    ui.ButtonSet.YES_NO
+  );
+  if (response !== ui.Button.YES) return;
 
-// ====== 웹앱 POST → Firestore 동기화 ======
-function doPost(e) {
   try {
-    const body = JSON.parse(e.postData.contents);
-    const sheetId = body.sheetId;
-    const ss = SpreadsheetApp.openById(sheetId);
-    syncAllSheetsToFirestore(ss);
-
-    return ContentService.createTextOutput(
-      JSON.stringify({ status: "success" })
-    ).setMimeType(ContentService.MimeType.JSON);
-
+    deleteMissingFromFirestore();
+    ui.alert("삭제 완료!");
   } catch (err) {
-    return ContentService.createTextOutput(
-      JSON.stringify({ status: "error", error: err.message })
-    ).setMimeType(ContentService.MimeType.JSON);
+    ui.alert("삭제 실패: " + err.message);
   }
 }
 
@@ -166,8 +129,8 @@ function getOAuthToken_() {
   return token;
 }
 
-// ====== Firestore 동기화 함수 (업데이트/생성만) ======
-function syncAllSheetsToFirestore(ss) {
+// ====== 변경 감지 후 Firestore 업데이트 ======
+function syncChangedRows(ss) {
   const sheets = ss.getSheets();
   const token = getOAuthToken_();
   const FIRESTORE_PROJECT = getConfig("FIRESTORE_PROJECT");
@@ -195,69 +158,67 @@ function syncAllSheetsToFirestore(ss) {
     const enCol = header.findIndex(h => (h || "").toString().trim().toLowerCase() === "value_en");
     const mnCol = header.findIndex(h => (h || "").toString().trim().toLowerCase() === "value_mn");
 
+    // 이전 값 캐시: Script Properties 활용
+    const cacheKey = `sheet_cache_${sheet.getName()}`;
+    const cachedStr = PropertiesService.getScriptProperties().getProperty(cacheKey) || "{}";
+    const cachedData = JSON.parse(cachedStr);
+
+    const writes = [];
+    const newCache = {};
+
     for (let i = headerRow + 1; i < data.length; i++) {
       const row = data[i];
-      let key = sanitizeFirestoreKey(row[keyCol]);
+      const key = sanitizeFirestoreKey(row[keyCol]);
       if (!key) continue;
 
-      const docData = {
-        fields: {
-          ko: { stringValue: koCol >= 0 ? row[koCol] || "" : "" },
-          en: { stringValue: enCol >= 0 ? row[enCol] || "" : "" },
-          mn: { stringValue: mnCol >= 0 ? row[mnCol] || "" : "" }
-        }
-      };
+      const koVal = koCol >= 0 ? row[koCol] || "" : "";
+      const enVal = enCol >= 0 ? row[enCol] || "" : "";
+      const mnVal = mnCol >= 0 ? row[mnCol] || "" : "";
 
-      const url = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents/${COLLECTION}/${key}`;
-      try {
-        const response = UrlFetchApp.fetch(url, {
-          method: "PATCH",
-          contentType: "application/json",
-          payload: JSON.stringify(docData),
-          headers: { Authorization: `Bearer ${token}` },
-          muteHttpExceptions: true
-        });
-        if (response.getResponseCode() === 404) {
-          const createUrl = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents/${COLLECTION}?documentId=${key}`;
-          UrlFetchApp.fetch(createUrl, {
-            method: "POST",
-            contentType: "application/json",
-            payload: JSON.stringify(docData),
-            headers: { Authorization: `Bearer ${token}` },
-            muteHttpExceptions: true
-          });
+      const currentHash = JSON.stringify({ ko: koVal, en: enVal, mn: mnVal });
+
+      // 값 변경 여부 체크
+      if (cachedData[key] === currentHash) continue;
+
+      // 변경 감지 → Firestore update 준비
+      const docPath = `projects/${FIRESTORE_PROJECT}/databases/(default)/documents/${COLLECTION}/${key}`;
+      writes.push({
+        update: {
+          name: docPath,
+          fields: {
+            ko: { stringValue: koVal },
+            en: { stringValue: enVal },
+            mn: { stringValue: mnVal }
+          }
         }
-      } catch (err) {
-        Logger.log(`Error uploading ${key}: ${err}`);
-      }
+      });
+
+      newCache[key] = currentHash;
     }
+
+    // 변경된 행이 있으면 Firestore commit
+    if (writes.length > 0) {
+      const url = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents:commit`;
+      UrlFetchApp.fetch(url, {
+        method: "POST",
+        contentType: "application/json",
+        payload: JSON.stringify({ writes }),
+        headers: { Authorization: `Bearer ${token}` },
+        muteHttpExceptions: true
+      });
+    }
+
+    // 새로운 캐시 저장
+    PropertiesService.getScriptProperties().setProperty(cacheKey, JSON.stringify({ ...cachedData, ...newCache }));
   });
 }
 
-// ====== 삭제 전용 함수 ======
-function triggerDelete() {
-  const ui = SpreadsheetApp.getUi();
-  const response = ui.alert(
-    "Firestore 삭제",
-    "시트에 없는 Firestore 데이터를 삭제하시겠습니까?",
-    ui.ButtonSet.YES_NO
-  );
-  if (response !== ui.Button.YES) return;
-
-  try {
-    deleteMissingFromFirestore();
-    ui.alert("삭제 완료!");
-  } catch (err) {
-    ui.alert("삭제 실패: " + err.message);
-  }
-}
-
+// ====== 삭제 함수 ======
 function deleteMissingFromFirestore() {
   const token = getOAuthToken_();
   const FIRESTORE_PROJECT = getConfig("FIRESTORE_PROJECT");
   const COLLECTION = getConfig("COLLECTION");
 
-  // 전체 Firestore 문서 가져오기
   const listUrl = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents/${COLLECTION}`;
   const response = UrlFetchApp.fetch(listUrl, {
     headers: { Authorization: `Bearer ${token}` },
@@ -266,7 +227,6 @@ function deleteMissingFromFirestore() {
   const json = JSON.parse(response.getContentText());
   if (!json.documents) return;
 
-  // 시트에 존재하는 key 모음
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheetKeys = new Set();
   ss.getSheets().forEach(sheet => {
@@ -292,7 +252,6 @@ function deleteMissingFromFirestore() {
     }
   });
 
-  // Firestore에서 sheetKeys에 없는 문서 삭제
   json.documents.forEach(doc => {
     const docId = doc.name.split("/").pop();
     if (!sheetKeys.has(docId)) {
