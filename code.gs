@@ -121,7 +121,7 @@ function getOAuthToken_() {
   const token = data.access_token;
   const expiresIn = data.expires_in || 3600;
 
-  props.setProperty('FIRESTORE_OAUTH', JSON.stringify({
+  PropertiesService.getScriptProperties().setProperty('FIRESTORE_OAUTH', JSON.stringify({
     token: token,
     expireAt: Date.now() + (expiresIn - 60) * 1000
   }));
@@ -136,7 +136,11 @@ function syncChangedRows(ss) {
   const FIRESTORE_PROJECT = getConfig("FIRESTORE_PROJECT");
   const COLLECTION = getConfig("COLLECTION");
 
+  const processedSheetNames = [];
+
   sheets.forEach(sheet => {
+    processedSheetNames.push(sheet.getName());
+
     const data = sheet.getDataRange().getValues();
     if (!data || data.length === 0) return;
 
@@ -158,17 +162,18 @@ function syncChangedRows(ss) {
     const enCol = header.findIndex(h => (h || "").toString().trim().toLowerCase() === "value_en");
     const mnCol = header.findIndex(h => (h || "").toString().trim().toLowerCase() === "value_mn");
 
-    // 이전 값 캐시: Script Properties 활용
     const cacheKey = `sheet_cache_${sheet.getName()}`;
     const cachedStr = PropertiesService.getScriptProperties().getProperty(cacheKey) || "{}";
-    const cachedData = JSON.parse(cachedStr);
+    let cachedData = {};
+    try { cachedData = JSON.parse(cachedStr); } catch (e) { cachedData = {}; }
 
     const writes = [];
-    const newCache = {};
+    const finalCache = {};
 
     for (let i = headerRow + 1; i < data.length; i++) {
       const row = data[i];
-      const key = sanitizeFirestoreKey(row[keyCol]);
+      const rawKey = row[keyCol];
+      const key = sanitizeFirestoreKey(rawKey);
       if (!key) continue;
 
       const koVal = koCol >= 0 ? row[koCol] || "" : "";
@@ -177,43 +182,60 @@ function syncChangedRows(ss) {
 
       const currentHash = JSON.stringify({ ko: koVal, en: enVal, mn: mnVal });
 
-      // 값 변경 여부 체크
-      if (cachedData[key] === currentHash) continue;
-
-      // 변경 감지 → Firestore update 준비
-      const docPath = `projects/${FIRESTORE_PROJECT}/databases/(default)/documents/${COLLECTION}/${key}`;
-      writes.push({
-        update: {
-          name: docPath,
-          fields: {
-            ko: { stringValue: koVal },
-            en: { stringValue: enVal },
-            mn: { stringValue: mnVal }
+      if (!cachedData[key] || cachedData[key] !== currentHash) {
+        const docPath = `projects/${FIRESTORE_PROJECT}/databases/(default)/documents/${COLLECTION}/${key}`;
+        writes.push({
+          update: {
+            name: docPath,
+            fields: {
+              ko: { stringValue: koVal },
+              en: { stringValue: enVal },
+              mn: { stringValue: mnVal }
+            }
           }
-        }
-      });
+        });
+      }
 
-      newCache[key] = currentHash;
+      finalCache[key] = currentHash;
     }
 
-    // 변경된 행이 있으면 Firestore commit
     if (writes.length > 0) {
-      const url = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents:commit`;
-      UrlFetchApp.fetch(url, {
-        method: "POST",
-        contentType: "application/json",
-        payload: JSON.stringify({ writes }),
-        headers: { Authorization: `Bearer ${token}` },
-        muteHttpExceptions: true
-      });
+      try {
+        const url = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents:commit`;
+        UrlFetchApp.fetch(url, {
+          method: "POST",
+          contentType: "application/json",
+          payload: JSON.stringify({ writes }),
+          headers: { Authorization: `Bearer ${token}` },
+          muteHttpExceptions: true
+        });
+      } catch (err) {
+        Logger.log(`Error committing writes for sheet "${sheet.getName()}": ${err}`);
+      }
     }
 
-    // 새로운 캐시 저장
-    PropertiesService.getScriptProperties().setProperty(cacheKey, JSON.stringify({ ...cachedData, ...newCache }));
+    try { PropertiesService.getScriptProperties().setProperty(cacheKey, JSON.stringify(finalCache)); }
+    catch (e) { Logger.log(`Failed to set cache for ${cacheKey}: ${e}`); }
   });
+
+  try { cleanUpSheetCaches(processedSheetNames); } catch (e) { Logger.log(`cleanUpSheetCaches error: ${e}`); }
 }
 
-// ====== 삭제 함수 ======
+// ====== 존재하지 않는 sheet_cache_* 정리 ======
+function cleanUpSheetCaches(existingSheetNames) {
+  const props = PropertiesService.getScriptProperties();
+  const allProps = props.getProperties();
+  for (const k in allProps) {
+    if (!k || !k.startsWith("sheet_cache_")) continue;
+    const sheetName = k.substring("sheet_cache_".length);
+    if (existingSheetNames.indexOf(sheetName) === -1) {
+      try { props.deleteProperty(k); Logger.log(`Deleted stale cache property: ${k}`); }
+      catch (e) { Logger.log(`Failed to delete cache property ${k}: ${e}`); }
+    }
+  }
+}
+
+// ====== 삭제 함수 (시트 없는 Firestore 문서만 삭제 + 해당 캐시에서 key만 제거) ======
 function deleteMissingFromFirestore() {
   const token = getOAuthToken_();
   const FIRESTORE_PROJECT = getConfig("FIRESTORE_PROJECT");
@@ -229,7 +251,9 @@ function deleteMissingFromFirestore() {
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheetKeys = new Set();
+  const sheetCacheMap = {};
   ss.getSheets().forEach(sheet => {
+    const sheetName = sheet.getName();
     const data = sheet.getDataRange().getValues();
     if (!data || data.length === 0) return;
 
@@ -246,21 +270,41 @@ function deleteMissingFromFirestore() {
     }
     if (keyCol === -1) return;
 
+    const cacheKey = `sheet_cache_${sheetName}`;
+    const cachedStr = PropertiesService.getScriptProperties().getProperty(cacheKey) || "{}";
+    let cachedData = {};
+    try { cachedData = JSON.parse(cachedStr); } catch (e) { cachedData = {}; }
+    sheetCacheMap[sheetName] = cachedData;
+
     for (let i = headerRow + 1; i < data.length; i++) {
       const key = sanitizeFirestoreKey(data[i][keyCol]);
       if (key) sheetKeys.add(key);
     }
   });
 
+  // Firestore에서 시트에 없는 문서 삭제 + 해당 시트 캐시에서 key 제거
+  const props = PropertiesService.getScriptProperties();
   json.documents.forEach(doc => {
     const docId = doc.name.split("/").pop();
     if (!sheetKeys.has(docId)) {
-      const delUrl = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents/${COLLECTION}/${docId}`;
-      UrlFetchApp.fetch(delUrl, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-        muteHttpExceptions: true
-      });
+      try {
+        const delUrl = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents/${COLLECTION}/${docId}`;
+        UrlFetchApp.fetch(delUrl, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+          muteHttpExceptions: true
+        });
+
+        // 삭제된 key를 소속 시트 캐시에서 제거
+        for (const sheetName in sheetCacheMap) {
+          if (sheetCacheMap[sheetName][docId]) {
+            delete sheetCacheMap[sheetName][docId];
+            PropertiesService.getScriptProperties().setProperty(`sheet_cache_${sheetName}`, JSON.stringify(sheetCacheMap[sheetName]));
+          }
+        }
+      } catch (e) {
+        Logger.log(`Failed to delete Firestore doc ${docId}: ${e}`);
+      }
     }
   });
 }
