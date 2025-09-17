@@ -158,9 +158,6 @@ function syncChangedRows(ss) {
     if (keyCol === -1) return;
 
     const header = data[headerRow];
-    const koCol = header.findIndex(h => (h || "").toString().trim().toLowerCase() === "value_ko");
-    const enCol = header.findIndex(h => (h || "").toString().trim().toLowerCase() === "value_en");
-    const mnCol = header.findIndex(h => (h || "").toString().trim().toLowerCase() === "value_mn");
 
     const cacheKey = `sheet_cache_${sheet.getName()}`;
     const cachedStr = PropertiesService.getScriptProperties().getProperty(cacheKey) || "{}";
@@ -176,22 +173,24 @@ function syncChangedRows(ss) {
       const key = sanitizeFirestoreKey(rawKey);
       if (!key) continue;
 
-      const koVal = koCol >= 0 ? row[koCol] || "" : "";
-      const enVal = enCol >= 0 ? row[enCol] || "" : "";
-      const mnVal = mnCol >= 0 ? row[mnCol] || "" : "";
+      // 모든 필드를 동적으로 생성 (key 열 제외)
+      const fields = {};
+      for (let c = 0; c < header.length; c++) {
+        if (c === keyCol) continue; // key 열 제외
+        const fieldName = (header[c] || "").toString().trim();
+        if (!fieldName) continue;
+        const fieldValue = row[c];
+        fields[fieldName] = { stringValue: (fieldValue || "").toString() };
+      }
 
-      const currentHash = JSON.stringify({ ko: koVal, en: enVal, mn: mnVal });
+      const currentHash = JSON.stringify(fields);
 
       if (!cachedData[key] || cachedData[key] !== currentHash) {
         const docPath = `projects/${FIRESTORE_PROJECT}/databases/(default)/documents/${COLLECTION}/${key}`;
         writes.push({
           update: {
             name: docPath,
-            fields: {
-              ko: { stringValue: koVal },
-              en: { stringValue: enVal },
-              mn: { stringValue: mnVal }
-            }
+            fields: fields
           }
         });
       }
