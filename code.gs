@@ -39,8 +39,14 @@ function triggerChangedSync() {
 
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    syncChangedRows(ss);
-    ui.alert("변경 감지 동기화 완료!");
+    const result = syncChangedRows(ss); // 개선: 실패 문서 결과 반환
+
+    if (result.failedDocs.length > 0) {
+      const messages = result.failedDocs.map(f => `- ${f.key}: ${f.error}`).join("\n");
+      ui.alert("동기화 완료!\n하지만 일부 문서가 실패했습니다:\n" + messages);
+    } else {
+      ui.alert("변경 감지 동기화 완료! 모든 문서가 성공했습니다.");
+    }
   } catch (err) {
     ui.alert("동기화 실패: " + err.message);
   }
@@ -129,7 +135,7 @@ function getOAuthToken_() {
   return token;
 }
 
-// ====== 변경 감지 후 Firestore 업데이트 ======
+// ====== 변경 감지 후 Firestore 업데이트 (개선) ======
 function syncChangedRows(ss) {
   const sheets = ss.getSheets();
   const token = getOAuthToken_();
@@ -137,6 +143,7 @@ function syncChangedRows(ss) {
   const COLLECTION = getConfig("COLLECTION");
 
   const processedSheetNames = [];
+  const failedDocs = []; // 개선: 실패 문서 리스트
 
   sheets.forEach(sheet => {
     processedSheetNames.push(sheet.getName());
@@ -165,6 +172,7 @@ function syncChangedRows(ss) {
     try { cachedData = JSON.parse(cachedStr); } catch (e) { cachedData = {}; }
 
     const writes = [];
+    const keyList = []; // 각 write에 대응하는 key 순서
     const finalCache = {};
 
     for (let i = headerRow + 1; i < data.length; i++) {
@@ -173,10 +181,9 @@ function syncChangedRows(ss) {
       const key = sanitizeFirestoreKey(rawKey);
       if (!key) continue;
 
-      // 모든 필드를 동적으로 생성 (key 열 제외)
       const fields = {};
       for (let c = 0; c < header.length; c++) {
-        if (c === keyCol) continue; // key 열 제외
+        if (c === keyCol) continue;
         const fieldName = (header[c] || "").toString().trim();
         if (!fieldName) continue;
         const fieldValue = row[c];
@@ -185,14 +192,19 @@ function syncChangedRows(ss) {
 
       const currentHash = JSON.stringify(fields);
 
+
+      // ---------- 테스트용 강제 실패 ----------
+      if (key.startsWith("aaaTestFail")) {
+        failedDocs.push({ sheet: sheet.getName(), key });
+        continue; // Firestore 요청 안보내고 실패 처리
+      }
+      // --------------------------------------
+
+
       if (!cachedData[key] || cachedData[key] !== currentHash) {
         const docPath = `projects/${FIRESTORE_PROJECT}/databases/(default)/documents/${COLLECTION}/${key}`;
-        writes.push({
-          update: {
-            name: docPath,
-            fields: fields
-          }
-        });
+        writes.push({ update: { name: docPath, fields: fields } });
+        keyList.push(key);
       }
 
       finalCache[key] = currentHash;
@@ -201,13 +213,23 @@ function syncChangedRows(ss) {
     if (writes.length > 0) {
       try {
         const url = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents:commit`;
-        UrlFetchApp.fetch(url, {
+        const response = UrlFetchApp.fetch(url, {
           method: "POST",
           contentType: "application/json",
           payload: JSON.stringify({ writes }),
           headers: { Authorization: `Bearer ${token}` },
           muteHttpExceptions: true
         });
+        const result = JSON.parse(response.getContentText());
+
+        // 개선: 개별 문서 실패 체크
+        if (result.writeResults && result.writeResults.length === keyList.length) {
+          result.writeResults.forEach((res, idx) => {
+            if (res.status && res.status.code !== 0) {
+              failedDocs.push({ key: keyList[idx], error: res.status.message || "unknown error" });
+            }
+          });
+        }
       } catch (err) {
         Logger.log(`Error committing writes for sheet "${sheet.getName()}": ${err}`);
       }
@@ -218,6 +240,8 @@ function syncChangedRows(ss) {
   });
 
   try { cleanUpSheetCaches(processedSheetNames); } catch (e) { Logger.log(`cleanUpSheetCaches error: ${e}`); }
+
+  return { failedDocs }; // 개선: 실패 문서 반환
 }
 
 // ====== 존재하지 않는 sheet_cache_* 정리 ======
@@ -294,7 +318,6 @@ function deleteMissingFromFirestore() {
           muteHttpExceptions: true
         });
 
-        // 삭제된 key를 소속 시트 캐시에서 제거
         for (const sheetName in sheetCacheMap) {
           if (sheetCacheMap[sheetName][docId]) {
             delete sheetCacheMap[sheetName][docId];
