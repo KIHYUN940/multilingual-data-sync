@@ -39,7 +39,7 @@ function triggerChangedSync() {
 
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const result = syncChangedRows(ss); // 개선: 실패 문서 결과 반환
+    const result = syncChangedRows(ss);
 
     if (result.failedDocs.length > 0) {
       const messages = result.failedDocs.map(f => `- ${f.key}: ${f.error}`).join("\n");
@@ -135,7 +135,7 @@ function getOAuthToken_() {
   return token;
 }
 
-// ====== 변경 감지 후 Firestore 업데이트 (개선) ======
+// ====== 변경 감지 후 Firestore 업데이트 ======
 function syncChangedRows(ss) {
   const sheets = ss.getSheets();
   const token = getOAuthToken_();
@@ -143,11 +143,10 @@ function syncChangedRows(ss) {
   const COLLECTION = getConfig("COLLECTION");
 
   const processedSheetNames = [];
-  const failedDocs = []; // 개선: 실패 문서 리스트
+  const failedDocs = [];
 
   sheets.forEach(sheet => {
     processedSheetNames.push(sheet.getName());
-
     const data = sheet.getDataRange().getValues();
     if (!data || data.length === 0) return;
 
@@ -165,14 +164,13 @@ function syncChangedRows(ss) {
     if (keyCol === -1) return;
 
     const header = data[headerRow];
-
     const cacheKey = `sheet_cache_${sheet.getName()}`;
     const cachedStr = PropertiesService.getScriptProperties().getProperty(cacheKey) || "{}";
     let cachedData = {};
     try { cachedData = JSON.parse(cachedStr); } catch (e) { cachedData = {}; }
 
     const writes = [];
-    const keyList = []; // 각 write에 대응하는 key 순서
+    const keyList = [];
     const finalCache = {};
 
     for (let i = headerRow + 1; i < data.length; i++) {
@@ -186,27 +184,15 @@ function syncChangedRows(ss) {
         if (c === keyCol) continue;
         const fieldName = (header[c] || "").toString().trim();
         if (!fieldName) continue;
-        const fieldValue = row[c];
-        fields[fieldName] = { stringValue: (fieldValue || "").toString() };
+        fields[fieldName] = { stringValue: (row[c] || "").toString() };
       }
 
       const currentHash = JSON.stringify(fields);
-
-
-      // ---------- 테스트용 강제 실패 ----------
-      if (key.startsWith("aaaTestFail")) {
-        failedDocs.push({ sheet: sheet.getName(), key });
-        continue; // Firestore 요청 안보내고 실패 처리
-      }
-      // --------------------------------------
-
-
       if (!cachedData[key] || cachedData[key] !== currentHash) {
         const docPath = `projects/${FIRESTORE_PROJECT}/databases/(default)/documents/${COLLECTION}/${key}`;
-        writes.push({ update: { name: docPath, fields: fields } });
+        writes.push({ update: { name: docPath, fields } });
         keyList.push(key);
       }
-
       finalCache[key] = currentHash;
     }
 
@@ -221,8 +207,6 @@ function syncChangedRows(ss) {
           muteHttpExceptions: true
         });
         const result = JSON.parse(response.getContentText());
-
-        // 개선: 개별 문서 실패 체크
         if (result.writeResults && result.writeResults.length === keyList.length) {
           result.writeResults.forEach((res, idx) => {
             if (res.status && res.status.code !== 0) {
@@ -241,7 +225,7 @@ function syncChangedRows(ss) {
 
   try { cleanUpSheetCaches(processedSheetNames); } catch (e) { Logger.log(`cleanUpSheetCaches error: ${e}`); }
 
-  return { failedDocs }; // 개선: 실패 문서 반환
+  return { failedDocs };
 }
 
 // ====== 존재하지 않는 sheet_cache_* 정리 ======
@@ -258,17 +242,20 @@ function cleanUpSheetCaches(existingSheetNames) {
   }
 }
 
-// ====== 삭제 함수 (시트 없는 Firestore 문서만 삭제 + 해당 캐시에서 key만 제거 + 페이지네이션 처리) ======
+// ====== Firestore 삭제 (배치 + 페이지네이션 + 재시도 + 로그) ======
 function deleteMissingFromFirestore() {
   const token = getOAuthToken_();
   const FIRESTORE_PROJECT = getConfig("FIRESTORE_PROJECT");
   const COLLECTION = getConfig("COLLECTION");
+  const batchSize = 250;        // 한 배치 최대 삭제 문서 수
+  const waitMs = 500;           // 배치 사이 대기 시간 (ms)
+  const maxRetries = 3;         // 실패 문서 재시도 횟수
 
+  // 시트에서 존재하는 key 모음
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheetKeys = new Set();
   const sheetCacheMap = {};
 
-  // 시트에서 모든 key 수집 및 캐시 로드
   ss.getSheets().forEach(sheet => {
     const sheetName = sheet.getName();
     const data = sheet.getDataRange().getValues();
@@ -300,28 +287,45 @@ function deleteMissingFromFirestore() {
   });
 
   let nextPageToken = null;
-  let pageCount = 0;  // 페이지 호출 카운터
+  let totalDeleted = 0;
+  let batchNumber = 0;
 
-  // Firestore 페이지네이션 순회
   do {
-    pageCount++;
-    let listUrl = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents/${COLLECTION}?pageSize=1000`;
+    let listUrl = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents/${COLLECTION}?pageSize=${batchSize}`;
     if (nextPageToken) listUrl += `&pageToken=${nextPageToken}`;
 
     const response = UrlFetchApp.fetch(listUrl, {
       headers: { Authorization: `Bearer ${token}` },
       muteHttpExceptions: true
     });
+
     const json = JSON.parse(response.getContentText());
+    if (!json.documents || json.documents.length === 0) break;
 
-    Logger.log(`페이지 ${pageCount} 호출됨, 문서 수: ${json.documents ? json.documents.length : 0}`);
-
-    if (!json.documents) break;
-
-    // Firestore에서 시트에 없는 문서 삭제 + 해당 시트 캐시에서 key 제거
-    json.documents.forEach(doc => {
+    // 삭제 대상 필터링
+    const docsToDelete = json.documents.filter(doc => {
       const docId = doc.name.split("/").pop();
-      if (!sheetKeys.has(docId)) {
+      return !sheetKeys.has(docId);
+    });
+
+    if (docsToDelete.length === 0) {
+      nextPageToken = json.nextPageToken || null;
+      continue;
+    }
+
+    batchNumber++;
+    Logger.log(`Starting Batch ${batchNumber}: ${docsToDelete.length} docs to delete`);
+
+    const failedDocs = [];
+
+    // 각 배치 처리
+    for (let i = 0; i < docsToDelete.length; i++) {
+      const doc = docsToDelete[i];
+      const docId = doc.name.split("/").pop();
+      let deleted = false;
+      let attempts = 0;
+
+      while (!deleted && attempts < maxRetries) {
         try {
           const delUrl = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents/${COLLECTION}/${docId}`;
           UrlFetchApp.fetch(delUrl, {
@@ -329,28 +333,38 @@ function deleteMissingFromFirestore() {
             headers: { Authorization: `Bearer ${token}` },
             muteHttpExceptions: true
           });
+          deleted = true;
 
+          // 캐시에서 제거
           for (const sheetName in sheetCacheMap) {
             if (sheetCacheMap[sheetName][docId]) {
               delete sheetCacheMap[sheetName][docId];
-              PropertiesService.getScriptProperties().setProperty(
-                `sheet_cache_${sheetName}`,
-                JSON.stringify(sheetCacheMap[sheetName])
-              );
+              PropertiesService.getScriptProperties().setProperty(`sheet_cache_${sheetName}`, JSON.stringify(sheetCacheMap[sheetName]));
             }
           }
         } catch (e) {
-          Logger.log(`Failed to delete Firestore doc ${docId}: ${e}`);
+          attempts++;
+          Logger.log(`Failed to delete Firestore doc ${docId} (attempt ${attempts}): ${e}`);
+          Utilities.sleep(1000); // 재시도 전 대기
         }
       }
-    });
+
+      if (!deleted) failedDocs.push(docId);
+    }
+
+    totalDeleted += (docsToDelete.length - failedDocs.length);
+    Logger.log(`Batch ${batchNumber} deleted: ${docsToDelete.length - failedDocs.length} docs, failed: ${failedDocs.length}`);
+
+    // 배치 완료 후 대역폭 보호용 대기
+    Utilities.sleep(waitMs);
 
     nextPageToken = json.nextPageToken || null;
   } while (nextPageToken);
 
-  Logger.log(`총 ${pageCount} 페이지 호출 완료`);
+  Logger.log(`Firestore 삭제 완료. 총 삭제 문서 수: ${totalDeleted}`);
 }
 
+// ====== 테스트용 시트 생성 (1500행) ======
 function createTestDataSheet1500() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName("TestData");
@@ -364,8 +378,6 @@ function createTestDataSheet1500() {
     rows.push([`TestKey${i}`, `Value${i}`]);
   }
 
-  // 한 번에 추가
   sheet.getRange(2, 1, rows.length, 2).setValues(rows);
-
   Logger.log("테스트 시트(TestData) 1500행 생성 완료");
 }
