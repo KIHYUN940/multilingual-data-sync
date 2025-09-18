@@ -258,23 +258,17 @@ function cleanUpSheetCaches(existingSheetNames) {
   }
 }
 
-// ====== 삭제 함수 (시트 없는 Firestore 문서만 삭제 + 해당 캐시에서 key만 제거) ======
+// ====== 삭제 함수 (시트 없는 Firestore 문서만 삭제 + 해당 캐시에서 key만 제거 + 페이지네이션 처리) ======
 function deleteMissingFromFirestore() {
   const token = getOAuthToken_();
   const FIRESTORE_PROJECT = getConfig("FIRESTORE_PROJECT");
   const COLLECTION = getConfig("COLLECTION");
 
-  const listUrl = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents/${COLLECTION}`;
-  const response = UrlFetchApp.fetch(listUrl, {
-    headers: { Authorization: `Bearer ${token}` },
-    muteHttpExceptions: true
-  });
-  const json = JSON.parse(response.getContentText());
-  if (!json.documents) return;
-
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheetKeys = new Set();
   const sheetCacheMap = {};
+
+  // 시트에서 모든 key 수집 및 캐시 로드
   ss.getSheets().forEach(sheet => {
     const sheetName = sheet.getName();
     const data = sheet.getDataRange().getValues();
@@ -305,28 +299,73 @@ function deleteMissingFromFirestore() {
     }
   });
 
-  // Firestore에서 시트에 없는 문서 삭제 + 해당 시트 캐시에서 key 제거
-  const props = PropertiesService.getScriptProperties();
-  json.documents.forEach(doc => {
-    const docId = doc.name.split("/").pop();
-    if (!sheetKeys.has(docId)) {
-      try {
-        const delUrl = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents/${COLLECTION}/${docId}`;
-        UrlFetchApp.fetch(delUrl, {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${token}` },
-          muteHttpExceptions: true
-        });
+  let nextPageToken = null;
+  let pageCount = 0;  // 페이지 호출 카운터
 
-        for (const sheetName in sheetCacheMap) {
-          if (sheetCacheMap[sheetName][docId]) {
-            delete sheetCacheMap[sheetName][docId];
-            PropertiesService.getScriptProperties().setProperty(`sheet_cache_${sheetName}`, JSON.stringify(sheetCacheMap[sheetName]));
+  // Firestore 페이지네이션 순회
+  do {
+    pageCount++;
+    let listUrl = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents/${COLLECTION}?pageSize=1000`;
+    if (nextPageToken) listUrl += `&pageToken=${nextPageToken}`;
+
+    const response = UrlFetchApp.fetch(listUrl, {
+      headers: { Authorization: `Bearer ${token}` },
+      muteHttpExceptions: true
+    });
+    const json = JSON.parse(response.getContentText());
+
+    Logger.log(`페이지 ${pageCount} 호출됨, 문서 수: ${json.documents ? json.documents.length : 0}`);
+
+    if (!json.documents) break;
+
+    // Firestore에서 시트에 없는 문서 삭제 + 해당 시트 캐시에서 key 제거
+    json.documents.forEach(doc => {
+      const docId = doc.name.split("/").pop();
+      if (!sheetKeys.has(docId)) {
+        try {
+          const delUrl = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents/${COLLECTION}/${docId}`;
+          UrlFetchApp.fetch(delUrl, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+            muteHttpExceptions: true
+          });
+
+          for (const sheetName in sheetCacheMap) {
+            if (sheetCacheMap[sheetName][docId]) {
+              delete sheetCacheMap[sheetName][docId];
+              PropertiesService.getScriptProperties().setProperty(
+                `sheet_cache_${sheetName}`,
+                JSON.stringify(sheetCacheMap[sheetName])
+              );
+            }
           }
+        } catch (e) {
+          Logger.log(`Failed to delete Firestore doc ${docId}: ${e}`);
         }
-      } catch (e) {
-        Logger.log(`Failed to delete Firestore doc ${docId}: ${e}`);
       }
-    }
-  });
+    });
+
+    nextPageToken = json.nextPageToken || null;
+  } while (nextPageToken);
+
+  Logger.log(`총 ${pageCount} 페이지 호출 완료`);
+}
+
+function createTestDataSheet1500() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName("TestData");
+  if (sheet) ss.deleteSheet(sheet);
+  sheet = ss.insertSheet("TestData");
+
+  sheet.appendRow(["key", "value"]);
+
+  const rows = [];
+  for (let i = 1; i <= 1500; i++) {
+    rows.push([`TestKey${i}`, `Value${i}`]);
+  }
+
+  // 한 번에 추가
+  sheet.getRange(2, 1, rows.length, 2).setValues(rows);
+
+  Logger.log("테스트 시트(TestData) 1500행 생성 완료");
 }
