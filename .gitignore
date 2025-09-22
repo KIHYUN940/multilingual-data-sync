@@ -2,3 +2,7 @@
 /data/
 
 /keys/
+
+# IntelliJ IDEA
+.idea/
+*.iml
