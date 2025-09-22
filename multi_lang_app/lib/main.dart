@@ -17,7 +17,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false, // DEBUG 배너 제거
-      title: 'Firevase Translator',
+      title: 'Firebase Translator',
       theme: ThemeData(
         primarySwatch: Colors.deepPurple,
       ),
@@ -33,7 +33,7 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Firevase Translator"),
+        title: const Text("Firebase Translator"),
         centerTitle: true,
         elevation: 0,
       ),
