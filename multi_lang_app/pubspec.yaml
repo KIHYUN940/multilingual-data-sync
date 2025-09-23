@@ -11,6 +11,8 @@ dependencies:
   flutter:
     sdk: flutter
 
+  dropdown_button2: ^2.0.0
+
   # Firebase 최신 호환 버전
   firebase_core: ^4.1.0
   cloud_firestore: ^6.0.1

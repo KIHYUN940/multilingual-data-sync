@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/firestore_service.dart';
 import '../models/translation.dart';
 import 'translation_management_screen.dart';
+import 'package:dropdown_button2/dropdown_button2.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -10,8 +12,54 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   String selectedLanguage = 'Value_KO';
+  int _currentPage = 0;
+  Timer? _timer;
+
+  // 배너 애니메이션 컨트롤러
+  late AnimationController _animationController;
+  late Animation<Offset> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(1, 0),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _animationController, curve: Curves.easeInOut));
+
+    _animationController.forward();
+
+    _timer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      _nextPage();
+    });
+  }
+
+  void _nextPage() {
+    setState(() {
+      _currentPage = (_currentPage + 1) % 2;
+      _animationController.reset();
+      _slideAnimation = Tween<Offset>(
+        begin: const Offset(1, 0),
+        end: Offset.zero,
+      ).animate(CurvedAnimation(parent: _animationController, curve: Curves.easeInOut));
+      _animationController.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _animationController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -20,8 +68,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("메인 화면"),
-        centerTitle: true,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: null,
       ),
       body: StreamBuilder<List<Translation>>(
         stream: FirestoreService().getTranslations(),
@@ -40,32 +89,66 @@ class _HomeScreenState extends State<HomeScreen> {
 
           return Column(
             children: [
-              // 광고 배너
+              // 배너 영역
               SizedBox(
-                height: screenHeight * 0.25,
-                width: double.infinity,
+                height: screenHeight * 0.32,
                 child: Stack(
                   children: [
-                    Container(
-                      width: double.infinity,
-                      decoration: const BoxDecoration(
-                        image: DecorationImage(
-                          image: AssetImage("assets/banner.jpg"),
-                          fit: BoxFit.cover,
+                    if (_currentPage == 0)
+                      SlideTransition(
+                        position: _slideAnimation,
+                        child: _buildBannerPage(
+                          screenWidth,
+                          '다국어 번역 동기화 프로젝트',
+                          'Firebase와 연결된 실시간 번역 관리',
+                          backgroundColor: Colors.deepPurple.shade50,
+                          titleColor: Colors.deepPurple.shade700,
+                          subtitleColor: Colors.deepPurple.shade400,
                         ),
                       ),
-                    ),
-                    Container(
-                      alignment: Alignment.center,
-                      color: Colors.black.withOpacity(0.4),
-                      child: Text(
-                        getText("homeBannerTitle"),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: screenWidth * 0.045,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                    if (_currentPage == 1)
+                      SlideTransition(
+                        position: _slideAnimation,
+                        child: _buildBannerPage(
+                          screenWidth,
+                          'Multilingual Translation Sync Project',
+                          'Real-time translation management connected with Firebase',
+                          backgroundColor: Colors.deepPurple.shade700,
+                          titleColor: Colors.deepPurple.shade50,
+                          subtitleColor: Colors.deepPurple.shade100,
                         ),
+                      ),
+                    // 페이지 인디케이터
+                    Positioned(
+                      bottom: 8,
+                      right: 16,
+                      child: Row(
+                        children: List.generate(2, (index) {
+                          return GestureDetector(
+                            onTap: () {
+                              if (_currentPage != index) {
+                                setState(() {
+                                  _currentPage = index;
+                                  _animationController.reset();
+                                  _slideAnimation = Tween<Offset>(
+                                    begin: const Offset(1, 0),
+                                    end: Offset.zero,
+                                  ).animate(CurvedAnimation(parent: _animationController, curve: Curves.easeInOut));
+                                  _animationController.forward();
+                                });
+                              }
+                            },
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 4),
+                              width: _currentPage == index ? 12 : 8,
+                              height: _currentPage == index ? 12 : 8,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: _currentPage == index ? Colors.deepPurple : Colors.deepPurple.shade200,
+                              ),
+                            ),
+                          );
+                        }),
                       ),
                     ),
                   ],
@@ -74,7 +157,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
               // 청력검사 버튼
               SizedBox(
-                height: screenHeight * 0.2,
+                height: screenHeight * 0.17,
                 width: screenWidth * 0.85,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 6.0),
@@ -84,7 +167,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      backgroundColor: Colors.deepPurple,
+                      backgroundColor: Colors.deepPurple.shade300,
                     ),
                     child: Text(
                       getText("homeHearTestTitle"),
@@ -115,6 +198,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         onTap: () {},
                         iconSize: screenWidth * 0.08,
                         fontSize: screenWidth * 0.035,
+                        color: Colors.deepPurple.shade300,
                       ),
                       _buildMenuButton(
                         icon: Icons.location_on,
@@ -122,6 +206,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         onTap: () {},
                         iconSize: screenWidth * 0.08,
                         fontSize: screenWidth * 0.035,
+                        color: Colors.deepPurple.shade300,
                       ),
                       _buildMenuButton(
                         icon: Icons.article,
@@ -129,6 +214,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         onTap: () {},
                         iconSize: screenWidth * 0.08,
                         fontSize: screenWidth * 0.035,
+                        color: Colors.deepPurple.shade300,
                       ),
                       _buildMenuButton(
                         icon: Icons.settings,
@@ -141,44 +227,65 @@ class _HomeScreenState extends State<HomeScreen> {
                         },
                         iconSize: screenWidth * 0.08,
                         fontSize: screenWidth * 0.035,
+                        color: Colors.deepPurple.shade300,
                       ),
                     ],
                   ),
                 ),
               ),
 
-              // 언어 선택 드롭다운 (맨 밑 중앙, 1/3 가로)
+              // 언어 선택 드롭다운
               Padding(
                 padding: const EdgeInsets.only(bottom: 12.0),
-                child: Container(
-                  width: screenWidth / 3,
-                  height: 40,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.deepPurple.shade50,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.deepPurple, width: 1),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: selectedLanguage,
-                      items: const [
-                        DropdownMenuItem(value: 'Value_KO', child: Text("한국어")),
-                        DropdownMenuItem(value: 'Value_EN', child: Text("English")),
-                        DropdownMenuItem(value: 'Value_MN', child: Text("Монгол")),
-                      ],
-                      onChanged: (value) {
-                        setState(() {
-                          selectedLanguage = value!;
-                        });
-                      },
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.deepPurple.shade700,
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton2<String>(
+                    value: selectedLanguage,
+                    isExpanded: true,
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'Value_KO',
+                        child: Center(child: Text("한국어")),
                       ),
-                      iconEnabledColor: Colors.deepPurple,
-                      isExpanded: true,
-                      alignment: Alignment.center,
+                      DropdownMenuItem(
+                        value: 'Value_EN',
+                        child: Center(child: Text("English")),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Value_MN',
+                        child: Center(child: Text("Монгол")),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      setState(() {
+                        selectedLanguage = value!;
+                      });
+                    },
+                    buttonStyleData: ButtonStyleData(
+                      height: 40,
+                      width: screenWidth / 4,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.deepPurple.shade50,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.deepPurple, width: 1),
+                      ),
+                    ),
+                    iconStyleData: const IconStyleData(
+                      icon: Icon(Icons.arrow_drop_down, color: Colors.deepPurple),
+                      iconSize: 24,
+                    ),
+                    dropdownStyleData: DropdownStyleData(
+                      maxHeight: 150,
+                      width: screenWidth / 4,
+                      offset: const Offset(0, -5),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: Colors.white,
+                      ),
+                    ),
+                    menuItemStyleData: const MenuItemStyleData(
+                      height: 40,
+                      padding: EdgeInsets.symmetric(horizontal: 8),
                     ),
                   ),
                 ),
@@ -190,16 +297,63 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildBannerPage(
+    double screenWidth,
+    String title,
+    String subtitle, {
+    required Color backgroundColor,
+    required Color titleColor,
+    required Color subtitleColor,
+  }) {
+    return Container(
+      width: double.infinity,
+      color: backgroundColor,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.translate,
+              size: screenWidth * 0.18,
+              color: titleColor,
+            ),
+            const SizedBox(height: 14),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: screenWidth * 0.05,
+                fontWeight: FontWeight.bold,
+                color: titleColor,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: screenWidth * 0.03,
+                color: subtitleColor,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildMenuButton({
     required IconData icon,
     required String label,
     required VoidCallback onTap,
     double iconSize = 40,
     double fontSize = 14,
+    Color color = Colors.deepPurple,
   }) {
     return ElevatedButton(
       style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.deepPurple,
+        backgroundColor: color,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       onPressed: onTap,
