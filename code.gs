@@ -27,21 +27,23 @@ function onOpen() {
     .addToUi();
 }
 
-// ====== 메뉴 클릭 시 변경된 행만 동기화 ======
+// ====== 웹앱 호출 공통 함수 ======
+function callWebApp(action) {
+  const WEBAPP_URL = getConfig("WEBAPP_URL");
+  const response = UrlFetchApp.fetch(WEBAPP_URL, {
+    method: "post",
+    payload: { action },
+    muteHttpExceptions: true
+  });
+  return JSON.parse(response.getContentText());
+}
+
+// ====== 메뉴 → 웹앱 호출 ======
 function triggerChangedSync() {
   const ui = SpreadsheetApp.getUi();
-  const response = ui.alert(
-    "Firestore 부분 동기화",
-    "변경된 행만 Firestore에 동기화하시겠습니까?",
-    ui.ButtonSet.YES_NO
-  );
-  if (response !== ui.Button.YES) return;
-
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const result = syncChangedRows(ss);
-
-    if (result.failedDocs.length > 0) {
+    const result = callWebApp("syncChangedRows");
+    if (result.failedDocs && result.failedDocs.length > 0) {
       const messages = result.failedDocs.map(f => `- ${f.key}: ${f.error}`).join("\n");
       ui.alert("동기화 완료!\n하지만 일부 문서가 실패했습니다:\n" + messages);
     } else {
@@ -52,22 +54,36 @@ function triggerChangedSync() {
   }
 }
 
-// ====== 메뉴 클릭 시 삭제 ======
 function triggerDelete() {
   const ui = SpreadsheetApp.getUi();
-  const response = ui.alert(
-    "Firestore 삭제",
-    "시트에 없는 Firestore 데이터를 삭제하시겠습니까?",
-    ui.ButtonSet.YES_NO
-  );
-  if (response !== ui.Button.YES) return;
-
   try {
-    deleteMissingFromFirestore();
+    callWebApp("deleteMissing");
     ui.alert("삭제 완료!");
   } catch (err) {
     ui.alert("삭제 실패: " + err.message);
   }
+}
+
+// ====== 웹앱 엔드포인트 (소유자 권한 실행) ======
+function doPost(e) {
+  const action = e.parameter.action;
+
+  if (action === "syncChangedRows") {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const result = syncChangedRows(ss);
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  if (action === "deleteMissing") {
+    deleteMissingFromFirestore();
+    return ContentService.createTextOutput(JSON.stringify({ success: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  return ContentService.createTextOutput(
+    JSON.stringify({ error: "Unknown action" })
+  ).setMimeType(ContentService.MimeType.JSON);
 }
 
 // ====== Firestore 키 안전 처리 ======
@@ -247,11 +263,10 @@ function deleteMissingFromFirestore() {
   const token = getOAuthToken_();
   const FIRESTORE_PROJECT = getConfig("FIRESTORE_PROJECT");
   const COLLECTION = getConfig("COLLECTION");
-  const batchSize = 250;        // 한 배치 최대 삭제 문서 수
-  const waitMs = 500;           // 배치 사이 대기 시간 (ms)
-  const maxRetries = 3;         // 실패 문서 재시도 횟수
+  const batchSize = 250;
+  const waitMs = 500;
+  const maxRetries = 3;
 
-  // 시트에서 존재하는 key 모음
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheetKeys = new Set();
   const sheetCacheMap = {};
@@ -302,7 +317,6 @@ function deleteMissingFromFirestore() {
     const json = JSON.parse(response.getContentText());
     if (!json.documents || json.documents.length === 0) break;
 
-    // 삭제 대상 필터링
     const docsToDelete = json.documents.filter(doc => {
       const docId = doc.name.split("/").pop();
       return !sheetKeys.has(docId);
@@ -318,7 +332,6 @@ function deleteMissingFromFirestore() {
 
     const failedDocs = [];
 
-    // 각 배치 처리
     for (let i = 0; i < docsToDelete.length; i++) {
       const doc = docsToDelete[i];
       const docId = doc.name.split("/").pop();
@@ -335,7 +348,6 @@ function deleteMissingFromFirestore() {
           });
           deleted = true;
 
-          // 캐시에서 제거
           for (const sheetName in sheetCacheMap) {
             if (sheetCacheMap[sheetName][docId]) {
               delete sheetCacheMap[sheetName][docId];
@@ -345,7 +357,7 @@ function deleteMissingFromFirestore() {
         } catch (e) {
           attempts++;
           Logger.log(`Failed to delete Firestore doc ${docId} (attempt ${attempts}): ${e}`);
-          Utilities.sleep(1000); // 재시도 전 대기
+          Utilities.sleep(1000);
         }
       }
 
@@ -355,7 +367,6 @@ function deleteMissingFromFirestore() {
     totalDeleted += (docsToDelete.length - failedDocs.length);
     Logger.log(`Batch ${batchNumber} deleted: ${docsToDelete.length - failedDocs.length} docs, failed: ${failedDocs.length}`);
 
-    // 배치 완료 후 대역폭 보호용 대기
     Utilities.sleep(waitMs);
 
     nextPageToken = json.nextPageToken || null;
