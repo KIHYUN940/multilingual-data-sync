@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/firestore_service.dart';
 import '../models/translation.dart';
 import 'translation_management_screen.dart';
-import 'package:dropdown_button2/dropdown_button2.dart';
+import '../widgets/language_dropdown.dart'; 
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -218,7 +218,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       ),
                       _buildMenuButton(
                         icon: Icons.settings,
-                        label: "번역 관리",
+                        label: getText("TranslationManagement"),
                         onTap: () {
                           Navigator.push(
                             context,
@@ -234,60 +234,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ),
               ),
 
-              // 언어 선택 드롭다운
+              // 커스텀 드롭다운 적용
               Padding(
                 padding: const EdgeInsets.only(bottom: 12.0),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton2<String>(
-                    value: selectedLanguage,
-                    isExpanded: true,
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'Value_KO',
-                        child: Center(child: Text("한국어")),
-                      ),
-                      DropdownMenuItem(
-                        value: 'Value_EN',
-                        child: Center(child: Text("English")),
-                      ),
-                      DropdownMenuItem(
-                        value: 'Value_MN',
-                        child: Center(child: Text("Монгол")),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      setState(() {
-                        selectedLanguage = value!;
-                      });
-                    },
-                    buttonStyleData: ButtonStyleData(
-                      height: 40,
-                      width: screenWidth / 4,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.deepPurple.shade50,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.deepPurple, width: 1),
-                      ),
-                    ),
-                    iconStyleData: const IconStyleData(
-                      icon: Icon(Icons.arrow_drop_down, color: Colors.deepPurple),
-                      iconSize: 24,
-                    ),
-                    dropdownStyleData: DropdownStyleData(
-                      maxHeight: 150,
-                      width: screenWidth / 4,
-                      offset: const Offset(0, -5),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        color: Colors.white,
-                      ),
-                    ),
-                    menuItemStyleData: const MenuItemStyleData(
-                      height: 40,
-                      padding: EdgeInsets.symmetric(horizontal: 8),
-                    ),
-                  ),
+                child: LanguageDropdown(
+                  selectedLanguage: selectedLanguage,
+                  onChanged: (value) {
+                    setState(() {
+                      selectedLanguage = value!;
+                    });
+                  },
+                  width: screenWidth / 4,
                 ),
               ),
             ],
