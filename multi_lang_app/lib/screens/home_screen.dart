@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../services/firestore_service.dart';
 import '../models/translation.dart';
 import 'translation_management_screen.dart';
 import '../widgets/language_dropdown.dart';
-import 'ear_test_page.dart'; 
+import '../providers/language_provider.dart';
+import 'ear_test_page.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,10 +16,10 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
-  String selectedLanguage = 'Value_KO';
   int _currentPage = 0;
   Timer? _timer;
 
+  // 배너 애니메이션 컨트롤러
   late AnimationController _animationController;
   late Animation<Offset> _slideAnimation;
 
@@ -66,6 +68,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final screenHeight = MediaQuery.of(context).size.height;
     final screenWidth = MediaQuery.of(context).size.width;
 
+    // Provider에서 언어 가져오기
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    final selectedLanguage = languageProvider.selectedLanguage;
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -79,6 +85,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
           final translations = snapshot.data!;
 
+          // Firestore에서 key로 번역 가져오기
           String getText(String key) {
             try {
               return translations.firstWhere((t) => t.id == key).getText(selectedLanguage);
@@ -154,7 +161,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ),
               ),
 
-              // 청력검사 버튼 (EarTestPage 이동)
+              // 청력검사 버튼
               SizedBox(
                 height: screenHeight * 0.17,
                 width: screenWidth * 0.85,
@@ -164,7 +171,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     onPressed: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const EarTestPage()),
+                        MaterialPageRoute(builder: (_) => EarTestPage()),
                       );
                     },
                     style: ElevatedButton.styleFrom(
@@ -244,9 +251,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 child: LanguageDropdown(
                   selectedLanguage: selectedLanguage,
                   onChanged: (value) {
-                    setState(() {
-                      selectedLanguage = value!;
-                    });
+                    languageProvider.setLanguage(value!); // Provider로 언어 변경
                   },
                   width: screenWidth / 4,
                 ),

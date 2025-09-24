@@ -1,22 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'hearing_total_page_a1.dart';
+import '../widgets/language_dropdown.dart';
+import '../providers/language_provider.dart';
 import '../services/firestore_service.dart';
 import '../models/translation.dart';
-import '../widgets/language_dropdown.dart';
-import 'hearing_total_page_a1.dart';
 
-class EarTestPage extends StatefulWidget {
+class EarTestPage extends StatelessWidget {
   const EarTestPage({super.key});
-
-  @override
-  State<EarTestPage> createState() => _EarTestPageState();
-}
-
-class _EarTestPageState extends State<EarTestPage> {
-  String selectedLanguage = 'Value_KO';
 
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
+
+    // Provider에서 언어 가져오기
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    final selectedLanguage = languageProvider.selectedLanguage;
 
     return Scaffold(
       appBar: AppBar(title: const Text("청력 검사")),
@@ -41,7 +40,7 @@ class _EarTestPageState extends State<EarTestPage> {
               "subtitle": getText("hearingSelect_003"),
               "action": () {
                 // TODO: 종합 청력검사 페이지 연결
-              },
+              }
             },
             {
               "title": getText("hearingSelect_004"),
@@ -50,10 +49,10 @@ class _EarTestPageState extends State<EarTestPage> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => HearingTotalPageA1(selectedLanguage: selectedLanguage),
+                    builder: (_) => HearingTotalPageA1(),
                   ),
                 );
-              },
+              }
             },
             {
               "title": getText("hearingSelect_010"),
@@ -91,9 +90,7 @@ class _EarTestPageState extends State<EarTestPage> {
                 child: LanguageDropdown(
                   selectedLanguage: selectedLanguage,
                   onChanged: (value) {
-                    setState(() {
-                      selectedLanguage = value!;
-                    });
+                    languageProvider.setLanguage(value!);
                   },
                   width: screenWidth / 4,
                 ),

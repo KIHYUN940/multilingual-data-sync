@@ -1,26 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../widgets/language_dropdown.dart';
+import '../providers/language_provider.dart';
 
-class HearingTotalPageA1 extends StatefulWidget {
-  final String selectedLanguage;
+class HearingTotalPageA1 extends StatelessWidget {
+  const HearingTotalPageA1({super.key});
 
-  const HearingTotalPageA1({super.key, required this.selectedLanguage});
-
-  @override
-  State<HearingTotalPageA1> createState() => _HearingTotalPageA1State();
-}
-
-class _HearingTotalPageA1State extends State<HearingTotalPageA1> {
-  late String selectedLanguage;
-
-  @override
-  void initState() {
-    super.initState();
-    selectedLanguage = widget.selectedLanguage;
-  }
-
-  // 여기서 나중에 Firestore 번역 데이터를 사용해 getText 함수로 언어별 텍스트 바꾸기 가능
-  String getText(String key) {
+  // Firestore에서 가져온 번역 데이터나 로컬 Map에서 key로 텍스트 가져오기
+  String getText(String key, String selectedLanguage) {
     Map<String, Map<String, String>> translations = {
       "healthManagement_001": {
         "Value_KO": "청력건강관리 체크 설문을 시작합니다!",
@@ -51,6 +38,10 @@ class _HearingTotalPageA1State extends State<HearingTotalPageA1> {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
 
+    // Provider에서 현재 선택 언어 가져오기
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    final selectedLanguage = languageProvider.selectedLanguage;
+
     return Scaffold(
       appBar: AppBar(title: const Text("청력건강관리 설문")),
       body: Column(
@@ -65,19 +56,19 @@ class _HearingTotalPageA1State extends State<HearingTotalPageA1> {
                   const Icon(Icons.health_and_safety, size: 80, color: Colors.blue),
                   const SizedBox(height: 20),
                   Text(
-                    getText("healthManagement_001"),
+                    getText("healthManagement_001", selectedLanguage),
                     style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    getText("healthManagement_002"),
+                    getText("healthManagement_002", selectedLanguage),
                     style: const TextStyle(fontSize: 16),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    getText("estimatedTime"),
+                    getText("estimatedTime", selectedLanguage),
                     style: const TextStyle(fontSize: 14, color: Colors.grey),
                   ),
                   const Spacer(),
@@ -94,7 +85,7 @@ class _HearingTotalPageA1State extends State<HearingTotalPageA1> {
                         ),
                       ),
                       child: Text(
-                        getText("healthManagement_003"),
+                        getText("healthManagement_003", selectedLanguage),
                         style: const TextStyle(fontSize: 18),
                       ),
                     ),
@@ -108,9 +99,9 @@ class _HearingTotalPageA1State extends State<HearingTotalPageA1> {
             child: LanguageDropdown(
               selectedLanguage: selectedLanguage,
               onChanged: (value) {
-                setState(() {
-                  selectedLanguage = value!;
-                });
+                if (value != null) {
+                  languageProvider.setLanguage(value); // Provider로 전역 언어 변경
+                }
               },
               width: screenWidth / 4,
             ),
