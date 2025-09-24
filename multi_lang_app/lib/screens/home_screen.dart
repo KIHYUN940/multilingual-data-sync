@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import '../services/firestore_service.dart';
 import '../models/translation.dart';
 import 'translation_management_screen.dart';
-import '../widgets/language_dropdown.dart'; 
+import '../widgets/language_dropdown.dart';
+import 'ear_test_page.dart'; 
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -17,7 +18,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   int _currentPage = 0;
   Timer? _timer;
 
-  // 배너 애니메이션 컨트롤러
   late AnimationController _animationController;
   late Animation<Offset> _slideAnimation;
 
@@ -118,7 +118,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                           subtitleColor: Colors.deepPurple.shade100,
                         ),
                       ),
-                    // 페이지 인디케이터
                     Positioned(
                       bottom: 8,
                       right: 16,
@@ -155,14 +154,19 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ),
               ),
 
-              // 청력검사 버튼
+              // 청력검사 버튼 (EarTestPage 이동)
               SizedBox(
                 height: screenHeight * 0.17,
                 width: screenWidth * 0.85,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 6.0),
                   child: ElevatedButton(
-                    onPressed: () {},
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const EarTestPage()),
+                      );
+                    },
                     style: ElevatedButton.styleFrom(
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
