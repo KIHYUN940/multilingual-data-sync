@@ -22,13 +22,19 @@ class EarTestPage extends StatelessWidget {
       body: StreamBuilder<List<Translation>>(
         stream: FirestoreService().getTranslations(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-          final translations = snapshot.data!;
+          final translations = snapshot.data ?? [];
 
           String getText(String key) {
             try {
-              return translations.firstWhere((t) => t.id == key).getText(selectedLanguage);
+              final t = translations.firstWhere(
+                (t) => t.id == key,
+                orElse: () => Translation(id: key, values: {}),
+              );
+              return t.getText(selectedLanguage) ?? '';
             } catch (e) {
               return '';
             }
@@ -73,13 +79,28 @@ class EarTestPage extends StatelessWidget {
                   itemCount: items.length,
                   itemBuilder: (context, index) {
                     final item = items[index];
+
+                    final VoidCallback action =
+                        (item['action'] as VoidCallback?) ?? () {};
+
                     return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: ListTile(
-                        title: Text(item["title"] as String),
-                        subtitle: Text(item["subtitle"] as String),
-                        trailing: const Icon(Icons.arrow_forward_ios),
-                        onTap: item["action"] as void Function(),
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      child: SizedBox(
+                        height: 120,
+                        child: ListTile(
+                          title: Text(
+                            item["title"] as String,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF4A148C), // Colors.deepPurple.shade700
+                              fontSize: 18,
+                            ),
+                          ),
+                          subtitle: Text(item["subtitle"] as String),
+                          trailing: const Icon(Icons.arrow_forward_ios),
+                          onTap: action,
+                        ),
                       ),
                     );
                   },
