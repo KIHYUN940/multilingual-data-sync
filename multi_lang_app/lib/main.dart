@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'screens/home_page.dart';
 import 'providers/language_provider.dart';
+import 'providers/real_time_provider.dart'; // 나중에 실시간 on/off용
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -11,13 +12,25 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   
-  // MyApp 전체를 ChangeNotifierProvider로 감싸서 LanguageProvider 등록
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => LanguageProvider(),
-      child: const MyApp(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => LanguageProvider()),
+        ChangeNotifierProvider(create: (_) => RealTimeProvider()), // 실시간 on/off용
+      ],
+      child: const MyAppWrapper(),
     ),
   );
+}
+
+// const MyAppWrapper()를 두는 이유: main에서 MultiProvider 바로 wrap
+class MyAppWrapper extends StatelessWidget {
+  const MyAppWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const MyApp();
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -34,7 +47,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.deepPurple,
       ),
-      home: const HomePage(),
+      home: HomePage(),
     );
   }
 }

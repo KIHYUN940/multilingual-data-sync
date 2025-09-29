@@ -6,6 +6,7 @@ import '../models/translation.dart';
 import 'translation_management_screen.dart';
 import '../widgets/language_dropdown.dart';
 import '../providers/language_provider.dart';
+import '../providers/real_time_provider.dart';
 import 'ear_test_page.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -19,9 +20,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   int _currentPage = 0;
   Timer? _timer;
 
-  // 배너 애니메이션 컨트롤러
   late AnimationController _animationController;
   late Animation<Offset> _slideAnimation;
+
+  // 캐싱된 Future 추가
+  Future<List<Translation>>? _cachedFuture;
 
   @override
   void initState() {
@@ -42,6 +45,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _timer = Timer.periodic(const Duration(seconds: 5), (timer) {
       _nextPage();
     });
+
+    // 한 번만 호출 후 저장
+    _cachedFuture = FirestoreService().getTranslationsOnce();
   }
 
   void _nextPage() {
@@ -67,199 +73,227 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
     final screenWidth = MediaQuery.of(context).size.width;
-
-    // Provider에서 언어 가져오기
     final languageProvider = Provider.of<LanguageProvider>(context);
     final selectedLanguage = languageProvider.selectedLanguage;
+
+    // RealTimeProvider 구독
+    final realTimeProvider = context.watch<RealTimeProvider>();
+    final isRealTime = realTimeProvider.isRealTime;
+
+    // 캐싱된 Future 사용
+    final Widget bodyContent = isRealTime
+        ? StreamBuilder<List<Translation>>(
+            key: const ValueKey('stream_mode'),
+            stream: FirestoreService().getTranslations(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (!snapshot.hasData) {
+                return const Center(child: Text("데이터 없음"));
+              }
+              return _buildContent(
+                  snapshot.data!, selectedLanguage, screenWidth, screenHeight, languageProvider);
+            },
+          )
+        : FutureBuilder<List<Translation>>(
+            key: const ValueKey('future_mode'),
+            future: _cachedFuture, // ✅ 여기서 캐싱된 Future 사용
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (!snapshot.hasData) {
+                return const Center(child: Text("데이터 없음"));
+              }
+              return _buildContent(
+                  snapshot.data!, selectedLanguage, screenWidth, screenHeight, languageProvider);
+            },
+          );
 
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: null,
+        actions: [
+          IconButton(
+            icon: Icon(isRealTime ? Icons.cloud : Icons.cloud_off),
+            onPressed: () => realTimeProvider.toggle(),
+          ),
+        ],
       ),
-      body: StreamBuilder<List<Translation>>(
-        stream: FirestoreService().getTranslations(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+      body: bodyContent,
+    );
+  }
 
-          final translations = snapshot.data!;
+  Widget _buildContent(
+    List<Translation> translations,
+    String selectedLanguage,
+    double screenWidth,
+    double screenHeight,
+    LanguageProvider languageProvider,
+  ) {
+    String getText(String key) {
+      try {
+        return translations.firstWhere((t) => t.id == key).getText(selectedLanguage);
+      } catch (_) {
+        return '';
+      }
+    }
 
-          // Firestore에서 key로 번역 가져오기
-          String getText(String key) {
-            try {
-              return translations.firstWhere((t) => t.id == key).getText(selectedLanguage);
-            } catch (e) {
-              return '';
-            }
-          }
-
-          return Column(
+    return Column(
+      children: [
+        SizedBox(
+          height: screenHeight * 0.32,
+          child: Stack(
             children: [
-              // 배너 영역
-              SizedBox(
-                height: screenHeight * 0.32,
-                child: Stack(
-                  children: [
-                    if (_currentPage == 0)
-                      SlideTransition(
-                        position: _slideAnimation,
-                        child: _buildBannerPage(
-                          screenWidth,
-                          '다국어 번역 동기화 프로젝트',
-                          'Firebase와 연결된 실시간 번역 관리',
-                          backgroundColor: Colors.deepPurple.shade50,
-                          titleColor: Colors.deepPurple.shade700,
-                          subtitleColor: Colors.deepPurple.shade400,
+              SlideTransition(
+                position: _slideAnimation,
+                child: _currentPage == 0
+                    ? _buildBannerPage(
+                        screenWidth,
+                        '다국어 번역 동기화 프로젝트',
+                        'Firebase와 연결된 실시간 번역 관리',
+                        backgroundColor: Colors.deepPurple.shade50,
+                        titleColor: Colors.deepPurple.shade700,
+                        subtitleColor: Colors.deepPurple.shade400,
+                      )
+                    : _buildBannerPage(
+                        screenWidth,
+                        'Multilingual Translation Sync Project',
+                        'Real-time translation management connected with Firebase',
+                        backgroundColor: Colors.deepPurple.shade700,
+                        titleColor: Colors.deepPurple.shade50,
+                        subtitleColor: Colors.deepPurple.shade100,
+                      ),
+              ),
+              Positioned(
+                bottom: 8,
+                right: 16,
+                child: Row(
+                  children: List.generate(2, (index) {
+                    return GestureDetector(
+                      onTap: () {
+                        if (_currentPage != index) {
+                          setState(() {
+                            _currentPage = index;
+                            _animationController.reset();
+                            _slideAnimation = Tween<Offset>(
+                              begin: const Offset(1, 0),
+                              end: Offset.zero,
+                            ).animate(
+                              CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+                            );
+                            _animationController.forward();
+                          });
+                        }
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        width: _currentPage == index ? 12 : 8,
+                        height: _currentPage == index ? 12 : 8,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _currentPage == index ? Colors.deepPurple : Colors.deepPurple.shade200,
                         ),
                       ),
-                    if (_currentPage == 1)
-                      SlideTransition(
-                        position: _slideAnimation,
-                        child: _buildBannerPage(
-                          screenWidth,
-                          'Multilingual Translation Sync Project',
-                          'Real-time translation management connected with Firebase',
-                          backgroundColor: Colors.deepPurple.shade700,
-                          titleColor: Colors.deepPurple.shade50,
-                          subtitleColor: Colors.deepPurple.shade100,
-                        ),
-                      ),
-                    Positioned(
-                      bottom: 8,
-                      right: 16,
-                      child: Row(
-                        children: List.generate(2, (index) {
-                          return GestureDetector(
-                            onTap: () {
-                              if (_currentPage != index) {
-                                setState(() {
-                                  _currentPage = index;
-                                  _animationController.reset();
-                                  _slideAnimation = Tween<Offset>(
-                                    begin: const Offset(1, 0),
-                                    end: Offset.zero,
-                                  ).animate(CurvedAnimation(parent: _animationController, curve: Curves.easeInOut));
-                                  _animationController.forward();
-                                });
-                              }
-                            },
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 4),
-                              width: _currentPage == index ? 12 : 8,
-                              height: _currentPage == index ? 12 : 8,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: _currentPage == index ? Colors.deepPurple : Colors.deepPurple.shade200,
-                              ),
-                            ),
-                          );
-                        }),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // 청력검사 버튼
-              SizedBox(
-                height: screenHeight * 0.17,
-                width: screenWidth * 0.85,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6.0),
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => EarTestPage()),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      backgroundColor: Colors.deepPurple.shade300,
-                    ),
-                    child: Text(
-                      getText("homeHearTestTitle"),
-                      style: TextStyle(
-                        fontSize: screenWidth * 0.045,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-
-              // 2x2 메뉴 버튼
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: GridView.count(
-                    crossAxisCount: 2,
-                    childAspectRatio: screenWidth / (screenHeight * 0.35),
-                    mainAxisSpacing: 8,
-                    crossAxisSpacing: 8,
-                    physics: const NeverScrollableScrollPhysics(),
-                    children: [
-                      _buildMenuButton(
-                        icon: Icons.chat,
-                        label: getText("homeHAChatbotTitle"),
-                        onTap: () {},
-                        iconSize: screenWidth * 0.08,
-                        fontSize: screenWidth * 0.035,
-                        color: Colors.deepPurple.shade300,
-                      ),
-                      _buildMenuButton(
-                        icon: Icons.location_on,
-                        label: getText("homeLocationTitle1"),
-                        onTap: () {},
-                        iconSize: screenWidth * 0.08,
-                        fontSize: screenWidth * 0.035,
-                        color: Colors.deepPurple.shade300,
-                      ),
-                      _buildMenuButton(
-                        icon: Icons.article,
-                        label: getText("homeHearingNewsTitle"),
-                        onTap: () {},
-                        iconSize: screenWidth * 0.08,
-                        fontSize: screenWidth * 0.035,
-                        color: Colors.deepPurple.shade300,
-                      ),
-                      _buildMenuButton(
-                        icon: Icons.settings,
-                        label: getText("TranslationManagement"),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const TranslationManagementScreen()),
-                          );
-                        },
-                        iconSize: screenWidth * 0.08,
-                        fontSize: screenWidth * 0.035,
-                        color: Colors.deepPurple.shade300,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // 커스텀 드롭다운 적용
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12.0),
-                child: LanguageDropdown(
-                  selectedLanguage: selectedLanguage,
-                  onChanged: (value) {
-                    languageProvider.setLanguage(value!); // Provider로 언어 변경
-                  },
-                  width: screenWidth / 4,
+                    );
+                  }),
                 ),
               ),
             ],
-          );
-        },
-      ),
+          ),
+        ),
+        SizedBox(
+          height: screenHeight * 0.17,
+          width: screenWidth * 0.85,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6.0),
+            child: ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const EarTestPage()),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                backgroundColor: Colors.deepPurple.shade300,
+              ),
+              child: Text(
+                getText("homeHearTestTitle"),
+                style: TextStyle(
+                  fontSize: screenWidth * 0.045,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: GridView.count(
+              crossAxisCount: 2,
+              childAspectRatio: screenWidth / (screenHeight * 0.35),
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              physics: const NeverScrollableScrollPhysics(),
+              children: [
+                _buildMenuButton(
+                  icon: Icons.chat,
+                  label: getText("homeHAChatbotTitle"),
+                  onTap: () {},
+                  iconSize: screenWidth * 0.08,
+                  fontSize: screenWidth * 0.035,
+                  color: Colors.deepPurple.shade300,
+                ),
+                _buildMenuButton(
+                  icon: Icons.location_on,
+                  label: getText("homeLocationTitle1"),
+                  onTap: () {},
+                  iconSize: screenWidth * 0.08,
+                  fontSize: screenWidth * 0.035,
+                  color: Colors.deepPurple.shade300,
+                ),
+                _buildMenuButton(
+                  icon: Icons.article,
+                  label: getText("homeHearingNewsTitle"),
+                  onTap: () {},
+                  iconSize: screenWidth * 0.08,
+                  fontSize: screenWidth * 0.035,
+                  color: Colors.deepPurple.shade300,
+                ),
+                _buildMenuButton(
+                  icon: Icons.settings,
+                  label: getText("TranslationManagement"),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const TranslationManagementScreen()),
+                    );
+                  },
+                  iconSize: screenWidth * 0.08,
+                  fontSize: screenWidth * 0.035,
+                  color: Colors.deepPurple.shade300,
+                ),
+              ],
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12.0),
+          child: LanguageDropdown(
+            selectedLanguage: selectedLanguage,
+            onChanged: (value) => languageProvider.setLanguage(value!),
+            width: screenWidth / 4,
+          ),
+        ),
+      ],
     );
   }
 

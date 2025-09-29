@@ -1,123 +1,163 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'hearing_total_page_a1.dart';
 import '../widgets/language_dropdown.dart';
 import '../providers/language_provider.dart';
+import '../providers/real_time_provider.dart';
 import '../services/firestore_service.dart';
 import '../models/translation.dart';
+import 'hearing_total_page_a1.dart';
 
-class EarTestPage extends StatelessWidget {
+class EarTestPage extends StatefulWidget {
   const EarTestPage({super.key});
+
+  @override
+  State<EarTestPage> createState() => _EarTestPageState();
+}
+
+class _EarTestPageState extends State<EarTestPage> {
+  Future<List<Translation>>? _cachedFuture; // 캐싱용 Future
+
+  @override
+  void initState() {
+    super.initState();
+    _cachedFuture = FirestoreService().getTranslationsOnce(); // 최초 1회만 실행
+  }
 
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-
-    // Provider에서 언어 가져오기
     final languageProvider = Provider.of<LanguageProvider>(context);
     final selectedLanguage = languageProvider.selectedLanguage;
 
+    // RealTimeProvider 구독
+    final realTimeProvider = context.watch<RealTimeProvider>();
+    final isRealTime = realTimeProvider.isRealTime;
+
+    // isRealTime 값에 따라 Builder 분리 + Future 캐싱 사용
+    final Widget content = isRealTime
+        ? StreamBuilder<List<Translation>>(
+            key: const ValueKey('stream_mode'),
+            stream: FirestoreService().getTranslations(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (!snapshot.hasData) {
+                return const Center(child: Text("데이터 없음"));
+              }
+              return _buildList(snapshot.data!, selectedLanguage, screenWidth, languageProvider);
+            },
+          )
+        : FutureBuilder<List<Translation>>(
+            key: const ValueKey('future_mode'),
+            future: _cachedFuture, // ✅ 캐싱된 Future 사용
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (!snapshot.hasData) {
+                return const Center(child: Text("데이터 없음"));
+              }
+              return _buildList(snapshot.data!, selectedLanguage, screenWidth, languageProvider);
+            },
+          );
+
     return Scaffold(
-      appBar: AppBar(title: const Text("청력 검사")),
-      body: StreamBuilder<List<Translation>>(
-        stream: FirestoreService().getTranslations(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      appBar: AppBar(
+        title: const Text("청력 검사"),
+        actions: [
+          IconButton(
+            icon: Icon(isRealTime ? Icons.cloud : Icons.cloud_off),
+            onPressed: () => realTimeProvider.toggle(),
+          ),
+        ],
+      ),
+      body: content,
+    );
+  }
 
-          final translations = snapshot.data ?? [];
+  // 리스트 뷰 생성
+  Widget _buildList(
+    List<Translation> translations,
+    String selectedLanguage,
+    double screenWidth,
+    LanguageProvider languageProvider,
+  ) {
+    String getText(String key) {
+      final t = translations.firstWhere(
+        (t) => t.id == key,
+        orElse: () => Translation(id: key, values: {}),
+      );
+      return t.getText(selectedLanguage);
+    }
 
-          String getText(String key) {
-            // translations에서 key가 존재하면 반환, 없으면 빈 문자열
-            final t = translations.firstWhere(
-              (t) => t.id == key,
-              orElse: () => Translation(id: key, values: {}),
-            );
-            return t.getText(selectedLanguage);
-          }
-
-          final items = [
-            {
-              "title": getText("hearingSelect_002"),
-              "subtitle": getText("hearingSelect_003"),
-              "action": () {
-                // TODO: 종합 청력검사 페이지 연결
-              }
-            },
-            {
-              "title": getText("hearingSelect_004"),
-              "subtitle": getText("hearingSelect_007"),
-              "action": () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => HearingTotalPageA1(),
-                  ),
-                );
-              }
-            },
-            {
-              "title": getText("hearingSelect_010"),
-              "subtitle": "",
-              "action": () {},
-            },
-            {
-              "title": getText("hearingSelect_014"),
-              "subtitle": getText("hearingSelect_015"),
-              "action": () {},
-            },
-          ];
-
-          return Column(
-            children: [
-              Expanded(
-                child: ListView.builder(
-                  itemCount: items.length,
-                  itemBuilder: (context, index) {
-                    final item = items[index];
-
-                    // onTap null-safe 처리
-                    final VoidCallback action =
-                        item['action'] as VoidCallback? ?? () {};
-
-                    return Card(
-                      margin: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      child: SizedBox(
-                        height: 120, 
-                        child: ListTile(
-                          title: Text(
-                            item["title"] as String,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF4A148C),
-                              fontSize: 18,
-                            ),
-                          ),
-                          subtitle: Text(item["subtitle"] as String),
-                          trailing: const Icon(Icons.arrow_forward_ios),
-                          onTap: action,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: LanguageDropdown(
-                  selectedLanguage: selectedLanguage,
-                  onChanged: (value) {
-                    languageProvider.setLanguage(value!);
-                  },
-                  width: screenWidth / 4,
-                ),
-              ),
-            ],
+    final items = [
+      {
+        "title": getText("hearingSelect_002"),
+        "subtitle": getText("hearingSelect_003"),
+        "action": () {},
+      },
+      {
+        "title": getText("hearingSelect_004"),
+        "subtitle": getText("hearingSelect_007"),
+        "action": () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const HearingTotalPageA1()),
           );
         },
-      ),
+      },
+      {
+        "title": getText("hearingSelect_010"),
+        "subtitle": "",
+        "action": () {},
+      },
+      {
+        "title": getText("hearingSelect_014"),
+        "subtitle": getText("hearingSelect_015"),
+        "action": () {},
+      },
+    ];
+
+    return Column(
+      children: [
+        Expanded(
+          child: ListView.builder(
+            itemCount: items.length,
+            itemBuilder: (context, index) {
+              final item = items[index];
+              final VoidCallback action = item['action'] as VoidCallback? ?? () {};
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: SizedBox(
+                  height: 120,
+                  child: ListTile(
+                    title: Text(
+                      item["title"] as String,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF4A148C),
+                        fontSize: 18,
+                      ),
+                    ),
+                    subtitle: Text(item["subtitle"] as String),
+                    trailing: const Icon(Icons.arrow_forward_ios),
+                    onTap: action,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: LanguageDropdown(
+            selectedLanguage: selectedLanguage,
+            onChanged: (value) => languageProvider.setLanguage(value!),
+            width: screenWidth / 4,
+          ),
+        ),
+      ],
     );
   }
 }
