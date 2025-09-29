@@ -29,15 +29,12 @@ class EarTestPage extends StatelessWidget {
           final translations = snapshot.data ?? [];
 
           String getText(String key) {
-            try {
-              final t = translations.firstWhere(
-                (t) => t.id == key,
-                orElse: () => Translation(id: key, values: {}),
-              );
-              return t.getText(selectedLanguage) ?? '';
-            } catch (e) {
-              return '';
-            }
+            // translations에서 key가 존재하면 반환, 없으면 빈 문자열
+            final t = translations.firstWhere(
+              (t) => t.id == key,
+              orElse: () => Translation(id: key, values: {}),
+            );
+            return t.getText(selectedLanguage);
           }
 
           final items = [
@@ -80,20 +77,21 @@ class EarTestPage extends StatelessWidget {
                   itemBuilder: (context, index) {
                     final item = items[index];
 
+                    // onTap null-safe 처리
                     final VoidCallback action =
-                        (item['action'] as VoidCallback?) ?? () {};
+                        item['action'] as VoidCallback? ?? () {};
 
                     return Card(
                       margin: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 8),
                       child: SizedBox(
-                        height: 120,
+                        height: 120, 
                         child: ListTile(
                           title: Text(
                             item["title"] as String,
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFF4A148C), // Colors.deepPurple.shade700
+                              color: Color(0xFF4A148C),
                               fontSize: 18,
                             ),
                           ),
