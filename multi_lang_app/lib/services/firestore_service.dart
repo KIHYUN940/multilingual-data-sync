@@ -1,9 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/translation.dart';
+import '../models/user_info.dart';
 
 class FirestoreService {
+  // translations 컬렉션 (설문 질문/옵션)
   final CollectionReference<Map<String, dynamic>> _translations =
       FirebaseFirestore.instance.collection('translations');
+
+  // responses 컬렉션 (유저 응답)
+  final CollectionReference<Map<String, dynamic>> _responses =
+      FirebaseFirestore.instance.collection('responses');
 
   /// 번역 추가 또는 업데이트
   Future<void> addTranslation(Translation translation) async {
@@ -25,5 +31,35 @@ class FirestoreService {
     return snapshot.docs
         .map((doc) => Translation.fromMap(doc.id, doc.data()))
         .toList();
+  }
+
+  /// 유저 응답 저장
+  /// - user.id가 비어있으면 Firestore에서 자동 doc 생성
+  /// - 저장 후 실제 doc id 반환
+  Future<String> saveUserResponse(UserInfo user, Map<String, dynamic> answers) async {
+    DocumentReference<Map<String, dynamic>> docRef;
+
+    if (user.id.isNotEmpty) {
+      // 기존 유저이면 doc id로 업데이트
+      docRef = _responses.doc(user.id);
+    } else {
+      // 신규 유저이면 Firestore 자동 id 생성
+      docRef = _responses.doc();
+    }
+
+    // 응답 저장
+    await docRef.set({
+      ...user.toMap(),
+      'answers': answers,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+
+    return docRef.id; // 저장된 doc id 반환
+  }
+
+  /// 특정 유저 응답 가져오기
+  Future<Map<String, dynamic>?> getUserResponse(String userId) async {
+    final doc = await _responses.doc(userId).get();
+    return doc.exists ? doc.data() : null;
   }
 }

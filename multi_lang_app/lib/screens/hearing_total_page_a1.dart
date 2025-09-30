@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../widgets/language_dropdown.dart';
 import '../providers/language_provider.dart';
+import '../providers/survey_provider.dart';
+import 'user_info_screen.dart';
+import 'survey_screen.dart';
+import '../widgets/language_dropdown.dart';
 
 class HearingTotalPageA1 extends StatelessWidget {
   const HearingTotalPageA1({super.key});
 
-  // Firestore에서 가져온 번역 데이터나 로컬 Map에서 key로 텍스트 가져오기
   String getText(String key, String selectedLanguage) {
     Map<String, Map<String, String>> translations = {
       "healthManagement_001": {
@@ -37,10 +39,9 @@ class HearingTotalPageA1 extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-
-    // Provider에서 현재 선택 언어 가져오기
     final languageProvider = Provider.of<LanguageProvider>(context);
     final selectedLanguage = languageProvider.selectedLanguage;
+    final surveyProvider = Provider.of<SurveyProvider>(context, listen: false);
 
     return Scaffold(
       appBar: AppBar(title: const Text("청력건강관리 설문")),
@@ -76,7 +77,13 @@ class HearingTotalPageA1 extends StatelessWidget {
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: () {
-                        // TODO: 실제 설문 시작 페이지로 이동
+                        // 항상 UserInfoScreen으로 이동
+                        surveyProvider.resetAnswers(); // 이전 답변 초기화
+                        surveyProvider.setUserInfo(null); // 유저 정보 초기화
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const UserInfoScreen()),
+                        );
                       },
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
@@ -100,7 +107,7 @@ class HearingTotalPageA1 extends StatelessWidget {
               selectedLanguage: selectedLanguage,
               onChanged: (value) {
                 if (value != null) {
-                  languageProvider.setLanguage(value); // Provider로 전역 언어 변경
+                  languageProvider.setLanguage(value);
                 }
               },
               width: screenWidth / 4,
