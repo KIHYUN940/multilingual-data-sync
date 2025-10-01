@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/language_provider.dart';
 import '../providers/survey_provider.dart';
-import 'user_info_screen.dart';
 import 'ear_test_page.dart';
+import 'user_info_screen.dart';
 import '../widgets/language_dropdown.dart';
 
 class HearingTotalPageA1 extends StatelessWidget {
@@ -32,8 +32,13 @@ class HearingTotalPageA1 extends StatelessWidget {
         "Value_MN": "Асуумжийг эхлүүлэх"
       },
     };
-
     return translations[key]?[selectedLanguage] ?? '';
+  }
+
+  void _goBackToEarTest(BuildContext context) {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const EarTestPage()),
+    );
   }
 
   @override
@@ -45,15 +50,17 @@ class HearingTotalPageA1 extends StatelessWidget {
 
     return WillPopScope(
       onWillPop: () async {
-        // 뒤로가기 시 바로 EarTestPage로 이동
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const EarTestPage()),
-        );
-        return false; // 기본 뒤로가기 이벤트 막기
+        _goBackToEarTest(context);
+        return false;
       },
       child: Scaffold(
-        appBar: AppBar(title: const Text("청력건강관리 설문")),
+        appBar: AppBar(
+          title: const Text("청력건강관리 설문"),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => _goBackToEarTest(context),
+          ),
+        ),
         body: Column(
           children: [
             Expanded(
@@ -63,11 +70,13 @@ class HearingTotalPageA1 extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     const SizedBox(height: 40),
-                    const Icon(Icons.health_and_safety, size: 80, color: Colors.blue),
+                    const Icon(Icons.health_and_safety,
+                        size: 80, color: Colors.blue),
                     const SizedBox(height: 20),
                     Text(
                       getText("healthManagement_001", selectedLanguage),
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                          fontSize: 22, fontWeight: FontWeight.bold),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 16),
@@ -79,27 +88,27 @@ class HearingTotalPageA1 extends StatelessWidget {
                     const SizedBox(height: 8),
                     Text(
                       getText("estimatedTime", selectedLanguage),
-                      style: const TextStyle(fontSize: 14, color: Colors.grey),
+                      style:
+                          const TextStyle(fontSize: 14, color: Colors.grey),
                     ),
                     const Spacer(),
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: () {
-                          // 이전 답변 초기화 및 사용자 정보 초기화
                           surveyProvider.resetAnswers();
                           surveyProvider.setUserInfo(null);
 
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (_) => const UserInfoScreen()),
+                            MaterialPageRoute(
+                                builder: (_) => const UserInfoScreen()),
                           );
                         },
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                              borderRadius: BorderRadius.circular(12)),
                         ),
                         child: Text(
                           getText("healthManagement_003", selectedLanguage),
@@ -116,9 +125,7 @@ class HearingTotalPageA1 extends StatelessWidget {
               child: LanguageDropdown(
                 selectedLanguage: selectedLanguage,
                 onChanged: (value) {
-                  if (value != null) {
-                    languageProvider.setLanguage(value);
-                  }
+                  if (value != null) languageProvider.setLanguage(value);
                 },
                 width: screenWidth / 4,
               ),

@@ -29,11 +29,9 @@ class _EarTestPageState extends State<EarTestPage> {
     final languageProvider = Provider.of<LanguageProvider>(context);
     final selectedLanguage = languageProvider.selectedLanguage;
 
-    // RealTimeProvider 구독
     final realTimeProvider = context.watch<RealTimeProvider>();
     final isRealTime = realTimeProvider.isRealTime;
 
-    // isRealTime 값에 따라 Builder 분리 + Future 캐싱 사용
     final Widget content = isRealTime
         ? StreamBuilder<List<Translation>>(
             key: const ValueKey('stream_mode'),
@@ -50,7 +48,7 @@ class _EarTestPageState extends State<EarTestPage> {
           )
         : FutureBuilder<List<Translation>>(
             key: const ValueKey('future_mode'),
-            future: _cachedFuture, // 캐싱된 Future 사용
+            future: _cachedFuture,
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
@@ -65,6 +63,13 @@ class _EarTestPageState extends State<EarTestPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("청력 검사"),
+        automaticallyImplyLeading: true, // 앱바 뒤로가기 표시
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            Navigator.pop(context); // HomeScreen으로 돌아감
+          },
+        ),
         actions: [
           IconButton(
             icon: Icon(isRealTime ? Icons.cloud : Icons.cloud_off),
@@ -76,7 +81,6 @@ class _EarTestPageState extends State<EarTestPage> {
     );
   }
 
-  // 리스트 뷰 생성
   Widget _buildList(
     List<Translation> translations,
     String selectedLanguage,
@@ -101,7 +105,8 @@ class _EarTestPageState extends State<EarTestPage> {
         "title": getText("hearingSelect_004"),
         "subtitle": getText("hearingSelect_007"),
         "action": () {
-          Navigator.push(
+          // HearingTotalPageA1로 이동할 때 스택 문제 방지
+          Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (_) => const HearingTotalPageA1()),
           );

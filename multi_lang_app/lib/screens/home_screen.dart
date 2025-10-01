@@ -23,7 +23,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   late AnimationController _animationController;
   late Animation<Offset> _slideAnimation;
 
-  // 캐싱된 Future 추가
   Future<List<Translation>>? _cachedFuture;
 
   @override
@@ -46,7 +45,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       _nextPage();
     });
 
-    // 한 번만 호출 후 저장
     _cachedFuture = FirestoreService().getTranslationsOnce();
   }
 
@@ -76,11 +74,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final languageProvider = Provider.of<LanguageProvider>(context);
     final selectedLanguage = languageProvider.selectedLanguage;
 
-    // RealTimeProvider 구독
     final realTimeProvider = context.watch<RealTimeProvider>();
     final isRealTime = realTimeProvider.isRealTime;
 
-    // 캐싱된 Future 사용
     final Widget bodyContent = isRealTime
         ? StreamBuilder<List<Translation>>(
             key: const ValueKey('stream_mode'),
@@ -98,7 +94,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           )
         : FutureBuilder<List<Translation>>(
             key: const ValueKey('future_mode'),
-            future: _cachedFuture, // ✅ 여기서 캐싱된 Future 사용
+            future: _cachedFuture,
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
@@ -115,7 +111,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: null,
+        automaticallyImplyLeading: false, // 홈에서는 뒤로가기 없음
         actions: [
           IconButton(
             icon: Icon(isRealTime ? Icons.cloud : Icons.cloud_off),
@@ -212,6 +208,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             padding: const EdgeInsets.symmetric(vertical: 6.0),
             child: ElevatedButton(
               onPressed: () {
+                // EarTestPage로 이동할 때 push (뒤로가기 가능)
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const EarTestPage()),
