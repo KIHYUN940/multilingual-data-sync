@@ -50,7 +50,7 @@ class _EarTestPageState extends State<EarTestPage> {
           )
         : FutureBuilder<List<Translation>>(
             key: const ValueKey('future_mode'),
-            future: _cachedFuture, // ✅ 캐싱된 Future 사용
+            future: _cachedFuture, // 캐싱된 Future 사용
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());

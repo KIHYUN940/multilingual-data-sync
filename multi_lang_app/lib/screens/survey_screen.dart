@@ -4,6 +4,8 @@ import '../models/survey_question.dart';
 import '../providers/survey_provider.dart';
 import '../providers/language_provider.dart';
 import 'hearing_total_page_a1.dart';
+import 'ear_test_page.dart';
+import 'user_info_screen.dart';
 
 class SurveyScreen extends StatefulWidget {
   const SurveyScreen({super.key});
@@ -14,6 +16,7 @@ class SurveyScreen extends StatefulWidget {
 
 class _SurveyScreenState extends State<SurveyScreen> {
   bool _loading = true;
+  bool _submitted = false; // 설문 제출 여부 확인
 
   @override
   void initState() {
@@ -24,7 +27,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
   Future<void> _loadSurveyQuestions() async {
     final surveyProvider = Provider.of<SurveyProvider>(context, listen: false);
     await surveyProvider.loadSurveyQuestions();
-    setState(() => _loading = false);
+    if (mounted) setState(() => _loading = false);
   }
 
   void _submitSurvey() async {
@@ -34,13 +37,16 @@ class _SurveyScreenState extends State<SurveyScreen> {
     await surveyProvider.submitResponses();
 
     if (mounted) {
+      setState(() => _submitted = true); // 제출 완료
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('설문 응답이 저장되었습니다!')),
       );
+
+      // 이전 스택 제거 후 HearingTotalPageA1로 이동
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const HearingTotalPageA1()),
-        (route) => false,
+        (route) => route.isFirst, // 첫 페이지(EarTestPage)만 남김
       );
     }
   }
@@ -58,7 +64,10 @@ class _SurveyScreenState extends State<SurveyScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(questionText, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+            Text(
+              questionText,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            ),
             const SizedBox(height: 8),
             ...options.map((opt) {
               return RadioListTile<String>(
@@ -74,12 +83,15 @@ class _SurveyScreenState extends State<SurveyScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(questionText, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+            Text(
+              questionText,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            ),
             const SizedBox(height: 8),
             TextFormField(
               onChanged: (val) => surveyProvider.setAnswer(q.key, val),
-              decoration: InputDecoration(
-                border: const OutlineInputBorder(),
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
                 hintText: "message", // 추후 번역 가능
               ),
             ),
@@ -96,22 +108,43 @@ class _SurveyScreenState extends State<SurveyScreen> {
     final lang = Provider.of<LanguageProvider>(context).selectedLanguage;
     final questions = surveyProvider.questions;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('청력 건강 설문')),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: ListView.separated(
-                itemCount: questions.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 24),
-                itemBuilder: (_, index) => _buildQuestionWidget(questions[index], lang),
+    return WillPopScope(
+      onWillPop: () async {
+        if (!_submitted) {
+          // 제출 전: UserInfoScreen으로 이동
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const UserInfoScreen()),
+          );
+        } else {
+          // 제출 후: EarTestPage로 이동
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const EarTestPage()),
+          );
+        }
+        return false; // 기본 뒤로가기 이벤트 막기
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('청력 건강 설문'),
+        ),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: ListView.separated(
+                  itemCount: questions.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 24),
+                  itemBuilder: (_, index) =>
+                      _buildQuestionWidget(questions[index], lang),
+                ),
               ),
-            ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _submitSurvey,
-        label: const Text('제출'),
-        icon: const Icon(Icons.send),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: _submitSurvey,
+          label: const Text('제출'),
+          icon: const Icon(Icons.send),
+        ),
       ),
     );
   }

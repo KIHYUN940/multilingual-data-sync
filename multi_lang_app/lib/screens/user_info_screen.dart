@@ -72,7 +72,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     String getText(String key) => translations[key]?[selectedLanguage] ?? '';
 
     return Scaffold(
-      appBar: AppBar(title: Text(getText('name') + " " + getText('required'))),
+      appBar: AppBar(title: Text('정보 입력란')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
