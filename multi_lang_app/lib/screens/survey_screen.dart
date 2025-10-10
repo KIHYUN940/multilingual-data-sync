@@ -8,7 +8,9 @@ import 'ear_test_page.dart';
 import 'user_info_screen.dart';
 
 class SurveyScreen extends StatefulWidget {
-  const SurveyScreen({super.key});
+  final String surveyId; // 설문 페이지 구분용
+
+  const SurveyScreen({super.key, required this.surveyId});
 
   @override
   _SurveyScreenState createState() => _SurveyScreenState();
@@ -16,7 +18,7 @@ class SurveyScreen extends StatefulWidget {
 
 class _SurveyScreenState extends State<SurveyScreen> {
   bool _loading = true;
-  bool _submitted = false; // 설문 제출 여부 확인
+  bool _submitted = false;
 
   @override
   void initState() {
@@ -26,7 +28,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
 
   Future<void> _loadSurveyQuestions() async {
     final surveyProvider = Provider.of<SurveyProvider>(context, listen: false);
-    await surveyProvider.loadSurveyQuestions();
+    await surveyProvider.loadSurveyQuestions(surveyId: widget.surveyId);
     if (mounted) setState(() => _loading = false);
   }
 
@@ -37,16 +39,15 @@ class _SurveyScreenState extends State<SurveyScreen> {
     await surveyProvider.submitResponses();
 
     if (mounted) {
-      setState(() => _submitted = true); // 제출 완료
+      setState(() => _submitted = true);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('설문 응답이 저장되었습니다!')),
       );
 
-      // 이전 스택 제거 후 HearingTotalPageA1로 이동
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const HearingTotalPageA1()),
-        (route) => route.isFirst, // 첫 페이지(EarTestPage)만 남김
+        (route) => route.isFirst,
       );
     }
   }
@@ -92,7 +93,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
               onChanged: (val) => surveyProvider.setAnswer(q.key, val),
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
-                hintText: "message", // 추후 번역 가능
+                hintText: "message",
               ),
             ),
           ],
@@ -111,19 +112,17 @@ class _SurveyScreenState extends State<SurveyScreen> {
     return WillPopScope(
       onWillPop: () async {
         if (!_submitted) {
-          // 제출 전: UserInfoScreen으로 이동
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (_) => const UserInfoScreen()),
           );
         } else {
-          // 제출 후: EarTestPage로 이동
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (_) => const EarTestPage()),
           );
         }
-        return false; // 기본 뒤로가기 이벤트 막기
+        return false;
       },
       child: Scaffold(
         appBar: AppBar(

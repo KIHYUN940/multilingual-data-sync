@@ -15,9 +15,11 @@ class SurveyProvider extends ChangeNotifier {
   Map<String, dynamic> get answers => _answers;
   UserInfo? get userInfo => _userInfo;
 
-  Future<void> loadSurveyQuestions() async {
+  /// 설문 질문 로드 (surveyId로 페이지 구분 가능)
+  Future<void> loadSurveyQuestions({String? surveyId}) async {
     final prefs = await SharedPreferences.getInstance();
-    final cachedData = prefs.getString('survey_cache');
+    final cacheKey = surveyId != null ? 'survey_cache_$surveyId' : 'survey_cache';
+    final cachedData = prefs.getString(cacheKey);
 
     if (cachedData != null) {
       _questions = SurveyQuestion.decodeList(cachedData);
@@ -26,14 +28,20 @@ class SurveyProvider extends ChangeNotifier {
 
     try {
       final translations = await _firestoreService.getTranslationsOnce();
-      final surveyTranslations =
-          translations.where((t) => t.id.startsWith('survey_')).toList();
 
-      _questions =
-          surveyTranslations.map((t) => SurveyQuestion.fromTranslation(t)).toList();
+      // Translation.values['surveyId'] 기반 필터링
+      final surveyTranslations = translations.where((t) {
+        final tSurveyId = t.values['surveyId'];
+        return surveyId == null
+            ? tSurveyId == null // 일반 번역 데이터 제외
+            : tSurveyId == surveyId; // 해당 설문 데이터만
+      }).toList();
 
-      await prefs.setString(
-          'survey_cache', SurveyQuestion.encodeList(_questions));
+      _questions = surveyTranslations
+          .map((t) => SurveyQuestion.fromTranslation(t))
+          .toList();
+
+      await prefs.setString(cacheKey, SurveyQuestion.encodeList(_questions));
       notifyListeners();
     } catch (e) {
       debugPrint('Failed to load survey questions: $e');

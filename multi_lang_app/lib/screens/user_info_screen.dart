@@ -111,7 +111,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
 
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const SurveyScreen()),
+        MaterialPageRoute(builder: (_) => const SurveyScreen(surveyId: 'survey01')),
       );
     }
   }
