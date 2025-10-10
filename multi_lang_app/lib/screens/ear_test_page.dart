@@ -6,6 +6,7 @@ import '../providers/real_time_provider.dart';
 import '../services/firestore_service.dart';
 import '../models/translation.dart';
 import 'user_info_screen.dart';
+import 'home_screen.dart'; // HomeScreen import 추가
 
 class EarTestPage extends StatefulWidget {
   const EarTestPage({super.key});
@@ -21,6 +22,14 @@ class _EarTestPageState extends State<EarTestPage> {
   void initState() {
     super.initState();
     _cachedFuture = FirestoreService().getTranslationsOnce(); // 최초 1회만 실행
+  }
+
+  void _goBackToHome() {
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const HomeScreen()),
+      (route) => false,
+    );
   }
 
   @override
@@ -60,24 +69,28 @@ class _EarTestPageState extends State<EarTestPage> {
             },
           );
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("청력 검사"),
-        automaticallyImplyLeading: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            Navigator.pop(context);
-          },
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(isRealTime ? Icons.cloud : Icons.cloud_off),
-            onPressed: () => realTimeProvider.toggle(),
+    return WillPopScope(
+      onWillPop: () async {
+        _goBackToHome(); // 뒤로가기 시 HomeScreen으로 이동
+        return false;
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text("청력 검사"),
+          automaticallyImplyLeading: false, // 기본 뒤로가기 제거
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: _goBackToHome, // 앱바 뒤로가기도 HomeScreen으로 이동
           ),
-        ],
+          actions: [
+            IconButton(
+              icon: Icon(isRealTime ? Icons.cloud : Icons.cloud_off),
+              onPressed: () => realTimeProvider.toggle(),
+            ),
+          ],
+        ),
+        body: content,
       ),
-      body: content,
     );
   }
 
@@ -95,7 +108,6 @@ class _EarTestPageState extends State<EarTestPage> {
       return t.getText(selectedLanguage);
     }
 
-    // 카드 목록 정의
     final items = [
       {
         "title": getText("hearingSelect_002"),
@@ -106,7 +118,6 @@ class _EarTestPageState extends State<EarTestPage> {
         "title": getText("hearingSelect_004"),
         "subtitle": getText("hearingSelect_007"),
         "action": () {
-          // 두 번째 박스 클릭 시 UserInfoScreen으로 이동
           Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const UserInfoScreen()),

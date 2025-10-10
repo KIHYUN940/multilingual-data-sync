@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/language_provider.dart';
-import '../providers/survey_provider.dart';
 import 'ear_test_page.dart';
 import 'survey_screen.dart';
 import '../widgets/language_dropdown.dart';
@@ -56,7 +55,6 @@ class HearingTotalPageA1 extends StatelessWidget {
     final screenWidth = MediaQuery.of(context).size.width;
     final languageProvider = Provider.of<LanguageProvider>(context);
     final selectedLanguage = languageProvider.selectedLanguage;
-    final surveyProvider = Provider.of<SurveyProvider>(context, listen: false);
 
     // 설문 버튼 리스트
     final List<Map<String, String>> surveyButtons = [

@@ -4,7 +4,6 @@ import '../models/survey_question.dart';
 import '../providers/survey_provider.dart';
 import '../providers/language_provider.dart';
 import 'hearing_total_page_a1.dart';
-import 'ear_test_page.dart';
 
 class SurveyScreen extends StatefulWidget {
   final String surveyId; // 설문 페이지 구분용
@@ -17,7 +16,6 @@ class SurveyScreen extends StatefulWidget {
 
 class _SurveyScreenState extends State<SurveyScreen> {
   bool _loading = true;
-  bool _submitted = false;
 
   @override
   void initState() {
@@ -38,7 +36,6 @@ class _SurveyScreenState extends State<SurveyScreen> {
     await surveyProvider.submitResponses();
 
     if (mounted) {
-      setState(() => _submitted = true);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('설문 응답이 저장되었습니다!')),
       );
@@ -110,7 +107,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
 
     return WillPopScope(
       onWillPop: () async {
-        // 설문 제출 전/후 구분 없이 뒤로가기 시 HearingTotalPageA1로 이동
+        // 뒤로가기 시 항상 HearingTotalPageA1로 이동
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const HearingTotalPageA1()),
