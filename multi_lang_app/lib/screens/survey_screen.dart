@@ -5,7 +5,6 @@ import '../providers/survey_provider.dart';
 import '../providers/language_provider.dart';
 import 'hearing_total_page_a1.dart';
 import 'ear_test_page.dart';
-import 'user_info_screen.dart';
 
 class SurveyScreen extends StatefulWidget {
   final String surveyId; // 설문 페이지 구분용
@@ -111,17 +110,11 @@ class _SurveyScreenState extends State<SurveyScreen> {
 
     return WillPopScope(
       onWillPop: () async {
-        if (!_submitted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const UserInfoScreen()),
-          );
-        } else {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const EarTestPage()),
-          );
-        }
+        // 설문 제출 전/후 구분 없이 뒤로가기 시 HearingTotalPageA1로 이동
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const HearingTotalPageA1()),
+        );
         return false;
       },
       child: Scaffold(

@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/survey_provider.dart';
 import '../providers/language_provider.dart';
 import '../models/user_info.dart';
-import 'survey_screen.dart';
+import 'hearing_total_page_a1.dart';
 
 // 생년월일 자동 하이픈 Formatter
 class DateInputFormatter extends TextInputFormatter {
@@ -67,7 +67,6 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   String _gender = 'male';
   final TextEditingController _birthController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
-
   DateTime? _selectedBirthDate;
 
   @override
@@ -109,9 +108,10 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
         ),
       );
 
+      // HearingTotalPageA1로 이동
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const SurveyScreen(surveyId: 'survey01')),
+        MaterialPageRoute(builder: (_) => const HearingTotalPageA1()),
       );
     }
   }
@@ -126,7 +126,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       'gender': {'Value_KO': '성별', 'Value_EN': 'Gender', 'Value_MN': 'Хүйс'},
       'birth': {'Value_KO': '생년월일', 'Value_EN': 'Birth Date', 'Value_MN': 'Төрсөн огноо'},
       'phone': {'Value_KO': '핸드폰 번호', 'Value_EN': 'Phone', 'Value_MN': 'Утасны дугаар'},
-      'submit': {'Value_KO': '설문 시작하기', 'Value_EN': 'Start Survey', 'Value_MN': 'Асуумжийг эхлүүлэх'},
+      'submit': {'Value_KO': '다음', 'Value_EN': 'Next', 'Value_MN': 'Дараагийн'},
       'required': {'Value_KO': '입력하세요', 'Value_EN': 'Please enter', 'Value_MN': 'Оруулна уу'},
       'name_invalid': {
         'Value_KO': '이름에는 숫자나 특수문자를 포함할 수 없습니다',
@@ -161,7 +161,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     String getText(String key) => translations[key]?[selectedLanguage] ?? '';
 
     return Scaffold(
-      appBar: AppBar(title: Text('유저 정보 입력란')),
+      appBar: AppBar(title: Text('유저 정보 입력')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -171,7 +171,6 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                 key: _formKey,
                 child: ListView(
                   children: [
-                    // 이름
                     TextFormField(
                       controller: _nameController,
                       decoration: InputDecoration(labelText: getText('name')),
@@ -181,14 +180,11 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                           return '${getText('name')} ${getText('required')}';
                         }
                         final regex = RegExp(r'^[a-zA-Z가-힣\s]+$');
-                        if (!regex.hasMatch(value.trim())) {
-                          return getText('name_invalid');
-                        }
+                        if (!regex.hasMatch(value.trim())) return getText('name_invalid');
                         return null;
                       },
                     ),
                     const SizedBox(height: 16),
-                    // 성별
                     DropdownButtonFormField<String>(
                       value: _gender,
                       items: [
@@ -200,7 +196,6 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                       decoration: InputDecoration(labelText: getText('gender')),
                     ),
                     const SizedBox(height: 16),
-                    // 생년월일
                     TextFormField(
                       controller: _birthController,
                       decoration: InputDecoration(
@@ -214,18 +209,12 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                       keyboardType: TextInputType.number,
                       inputFormatters: [DateInputFormatter()],
                       validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return '${getText('birth')} ${getText('required')}';
-                        }
+                        if (value == null || value.trim().isEmpty) return '${getText('birth')} ${getText('required')}';
                         final regex = RegExp(r'^\d{4}-\d{2}-\d{2}$');
-                        if (!regex.hasMatch(value.trim())) {
-                          return getText('birth_invalid_format');
-                        }
+                        if (!regex.hasMatch(value.trim())) return getText('birth_invalid_format');
                         try {
                           final date = DateTime.parse(value.trim());
-                          if (date.isAfter(DateTime.now())) {
-                            return getText('birth_future');
-                          }
+                          if (date.isAfter(DateTime.now())) return getText('birth_future');
                         } catch (_) {
                           return getText('birth_invalid_date');
                         }
@@ -233,20 +222,15 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                       },
                     ),
                     const SizedBox(height: 16),
-                    // 핸드폰
                     TextFormField(
                       controller: _phoneController,
                       decoration: InputDecoration(labelText: getText('phone')),
                       keyboardType: TextInputType.number,
                       inputFormatters: [PhoneInputFormatter()],
                       validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return '${getText('phone')} ${getText('required')}';
-                        }
+                        if (value == null || value.trim().isEmpty) return '${getText('phone')} ${getText('required')}';
                         final regex = RegExp(r'^\d{3}-\d{3,4}-\d{4}$');
-                        if (!regex.hasMatch(value.trim())) {
-                          return getText('phone_invalid');
-                        }
+                        if (!regex.hasMatch(value.trim())) return getText('phone_invalid');
                         return null;
                       },
                     ),

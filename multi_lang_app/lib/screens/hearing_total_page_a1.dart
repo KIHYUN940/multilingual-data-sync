@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/language_provider.dart';
 import '../providers/survey_provider.dart';
 import 'ear_test_page.dart';
-import 'user_info_screen.dart';
+import 'survey_screen.dart';
 import '../widgets/language_dropdown.dart';
 
 class HearingTotalPageA1 extends StatelessWidget {
@@ -26,10 +26,20 @@ class HearingTotalPageA1 extends StatelessWidget {
         "Value_EN": "(Estimated time 3 min)",
         "Value_MN": "(хугацаа: 3 минут)"
       },
-      "healthManagement_003": {
-        "Value_KO": "설문 시작하기",
-        "Value_EN": "Start Survey",
-        "Value_MN": "Асуумжийг эхлүүлэх"
+      "surveyButton_001": {
+        "Value_KO": "청력 체크 설문 1",
+        "Value_EN": "Hearing Survey 1",
+        "Value_MN": "Сонсголын асуумж 1"
+      },
+      "surveyButton_002": {
+        "Value_KO": "청력 체크 설문 2",
+        "Value_EN": "Hearing Survey 2",
+        "Value_MN": "Сонсголын асуумж 2"
+      },
+      "surveyButton_003": {
+        "Value_KO": "청력 체크 설문 3",
+        "Value_EN": "Hearing Survey 3",
+        "Value_MN": "Сонсголын асуумж 3"
       },
     };
     return translations[key]?[selectedLanguage] ?? '';
@@ -47,6 +57,13 @@ class HearingTotalPageA1 extends StatelessWidget {
     final languageProvider = Provider.of<LanguageProvider>(context);
     final selectedLanguage = languageProvider.selectedLanguage;
     final surveyProvider = Provider.of<SurveyProvider>(context, listen: false);
+
+    // 설문 버튼 리스트
+    final List<Map<String, String>> surveyButtons = [
+      {"id": "survey01", "label": getText("surveyButton_001", selectedLanguage)},
+      {"id": "survey02", "label": getText("surveyButton_002", selectedLanguage)},
+      {"id": "survey03", "label": getText("surveyButton_003", selectedLanguage)},
+    ];
 
     return WillPopScope(
       onWillPop: () async {
@@ -91,29 +108,39 @@ class HearingTotalPageA1 extends StatelessWidget {
                       style:
                           const TextStyle(fontSize: 14, color: Colors.grey),
                     ),
-                    const Spacer(),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          surveyProvider.resetAnswers();
-                          surveyProvider.setUserInfo(null);
-
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => const UserInfoScreen()),
+                    const SizedBox(height: 24),
+                    // 설문 버튼 목록
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: surveyButtons.length,
+                        itemBuilder: (context, index) {
+                          final survey = surveyButtons[index];
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12)),
+                                ),
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (_) => SurveyScreen(
+                                            surveyId: survey["id"]!)),
+                                  );
+                                },
+                                child: Text(
+                                  survey["label"]!,
+                                  style: const TextStyle(fontSize: 18),
+                                ),
+                              ),
+                            ),
                           );
                         },
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: Text(
-                          getText("healthManagement_003", selectedLanguage),
-                          style: const TextStyle(fontSize: 18),
-                        ),
                       ),
                     ),
                   ],

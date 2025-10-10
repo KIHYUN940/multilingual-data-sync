@@ -5,7 +5,7 @@ import '../providers/language_provider.dart';
 import '../providers/real_time_provider.dart';
 import '../services/firestore_service.dart';
 import '../models/translation.dart';
-import 'hearing_total_page_a1.dart';
+import 'user_info_screen.dart';
 
 class EarTestPage extends StatefulWidget {
   const EarTestPage({super.key});
@@ -63,11 +63,11 @@ class _EarTestPageState extends State<EarTestPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("청력 검사"),
-        automaticallyImplyLeading: true, // 앱바 뒤로가기 표시
+        automaticallyImplyLeading: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
-            Navigator.pop(context); // HomeScreen으로 돌아감
+            Navigator.pop(context);
           },
         ),
         actions: [
@@ -95,20 +95,21 @@ class _EarTestPageState extends State<EarTestPage> {
       return t.getText(selectedLanguage);
     }
 
+    // 카드 목록 정의
     final items = [
       {
         "title": getText("hearingSelect_002"),
         "subtitle": getText("hearingSelect_003"),
-        "action": () {},
+        "action": () {}, // 첫 번째 박스는 이동 없음
       },
       {
         "title": getText("hearingSelect_004"),
         "subtitle": getText("hearingSelect_007"),
         "action": () {
-          // HearingTotalPageA1로 이동할 때 스택 문제 방지
-          Navigator.pushReplacement(
+          // 두 번째 박스 클릭 시 UserInfoScreen으로 이동
+          Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const HearingTotalPageA1()),
+            MaterialPageRoute(builder: (_) => const UserInfoScreen()),
           );
         },
       },
