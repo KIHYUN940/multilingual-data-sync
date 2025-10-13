@@ -41,7 +41,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Hearing Survey',
+      title: 'Multilingual Translation Synchronization Project',
       theme: ThemeData(primarySwatch: Colors.deepPurple),
       home: const HomePage(),
     );
