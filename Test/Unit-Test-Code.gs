@@ -1,4 +1,4 @@
-// ====== Test-Code.gs ======
+// ====== Unit-Test-Code.gs ======
 // Firestore 호출 없이 단위 테스트용 스크립트
 // 운영 코드와 중복되는 함수 이름을 피하기 위해 _Test 접미사 사용
 
@@ -7,9 +7,12 @@ function testSanitizeFirestoreKey_Test() {
   const cases = [
     { input: "normalKey", expected: "normalKey" },
     { input: " key with spaces ", expected: "key_with_spaces" },
-    { input: "special/#[]chars", expected: "special____chars" },
+    { input: "special/#[]chars", expected: "special_chars" },
+    { input: "emoji🚀key", expected: "emoji_key" },
+    { input: "complex key/#🚀[]!@#", expected: "complex_key" },
     { input: "", expected: "_" },
     { input: null, expected: "_" },
+    { input: "   ", expected: "_" }
   ];
 
   cases.forEach(({ input, expected }) => {
@@ -60,16 +63,15 @@ function testRowToDocData_Test() {
   Logger.log("row → docData 변환 테스트 통과!");
 }
 
-// ====== 시트-업로드 시뮬레이션 테스트 (삭제 제외) ======
-function testSyncSimulation_Test() {
-  // 가짜 시트 데이터 (2개 문서)
+// ====== 시트-업로드 시뮬레이션 테스트 (추가/삭제 포함) ======
+function testSyncSimulationWithDelete_Test() {
   const sheetData = [
     ["key", "value_ko", "value_en", "value_mn"],
     ["key1", "안녕1", "Hello1", "Сайн уу1"],
     ["key2", "안녕2", "Hello2", "Сайн уу2"]
   ];
 
-  // 기존 Firestore 문서 (시뮬레이션)
+  // 기존 Firestore 시뮬레이션
   let firestoreDocs = {
     "key2": { ko: "Old2", en: "Old2", mn: "Old2" },
     "key3": { ko: "Old3", en: "Old3", mn: "Old3" }
@@ -77,7 +79,6 @@ function testSyncSimulation_Test() {
 
   Logger.log("초기 Firestore 시뮬레이션: " + JSON.stringify(firestoreDocs));
 
-  // 1. 시트 데이터를 docData로 변환 + 업로드 시뮬레이션
   const header = sheetData[0];
   const keyCol = header.indexOf("key");
   const koCol = header.indexOf("value_ko");
@@ -97,31 +98,41 @@ function testSyncSimulation_Test() {
     firestoreDocs[key] = docData; // 업로드 시뮬레이션
   }
 
-  Logger.log("업로드 후 Firestore 시뮬레이션: " + JSON.stringify(firestoreDocs));
+  // 삭제 로직: 시트에 없는 Firestore 키 삭제
+  Object.keys(firestoreDocs).forEach(k => {
+    if (!sheetKeys.has(k)) {
+      delete firestoreDocs[k];
+    }
+  });
 
-  // 검증: 시트에 있는 key가 Firestore에 존재
+  Logger.log("업로드+삭제 후 Firestore 시뮬레이션: " + JSON.stringify(firestoreDocs));
+
+  // 검증
   ["key1", "key2"].forEach(k => {
     if (!firestoreDocs[k]) throw new Error(`업로드 시뮬레이션 실패: ${k}`);
   });
+  if (firestoreDocs["key3"]) throw new Error("삭제 시뮬레이션 실패: key3");
 
-  Logger.log("업로드 시뮬레이션 단위 테스트 통과!");
+  Logger.log("업로드+삭제 시뮬레이션 단위 테스트 통과!");
 }
 
 // ====== 단위 테스트 실행 ======
-function runAllUnitTests() {
+function runAllUnitTests_Test() {
   testSanitizeFirestoreKey_Test();
   testObjectToFirestoreFields_Test();
   testRowToDocData_Test();
-  testSyncSimulation_Test();
+  testSyncSimulationWithDelete_Test();
   Logger.log("모든 단위 테스트 통과!");
 }
 
 // ====== 운영 코드와 이름 중복 피하기 위해 별도 정의 ======
 function sanitizeFirestoreKey_Test(key) {
-  if (!key) return "_";
-  return key.toString().trim()
-    .replace(/[\/#\[\]\s]/g, "_")
-    .replace(/[^a-zA-Z0-9_\-]/g, "");
+  if (!key || !key.toString().trim()) return "_";
+  // 모든 알파벳, 숫자, '-' 제외 나머지 '_'로 변환
+  let result = key.toString().trim().replace(/[^a-zA-Z0-9\-]+/g, "_");
+  // 앞뒤 '_' 제거
+  result = result.replace(/^_+|_+$/g, "");
+  return result || "_";
 }
 
 function objectToFirestoreFields_Test(obj) {
