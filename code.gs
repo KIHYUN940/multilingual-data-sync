@@ -1,5 +1,6 @@
 /**
- * Firestore와 Google Sheets 부분 동기화 (변경 감지 + 웹앱 + 소유자 권한)
+ * Firestore와 Google Sheets 부분 동기화 + 전체 동기화 + 삭제
+ * 변경 감지 + 웹앱 + 소유자 권한
  * 공유 계정도 버튼을 눌러 동기화 가능
  * 민감 정보는 Script Properties 환경변수에서 가져와 안전하게 처리
  */
@@ -23,6 +24,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("Firestore Sync")
     .addItem("Sync Changed Rows", "triggerChangedSync")
+    .addItem("Full Sync", "triggerFullSync")
     .addItem("Delete Missing Data", "triggerDelete")
     .addToUi();
 }
@@ -38,11 +40,19 @@ function callWebApp(action) {
   return JSON.parse(response.getContentText());
 }
 
-// ====== 메뉴 → 웹앱 호출 ======
+// ====== 메뉴 클릭 시 변경된 행만 동기화 ======
 function triggerChangedSync() {
   const ui = SpreadsheetApp.getUi();
+  const response = ui.alert(
+    "Firestore 부분 동기화",
+    "변경된 행만 Firestore에 동기화하시겠습니까?",
+    ui.ButtonSet.YES_NO
+  );
+  if (response !== ui.Button.YES) return;
+
   try {
     const result = callWebApp("syncChangedRows");
+
     if (result.failedDocs && result.failedDocs.length > 0) {
       const messages = result.failedDocs.map(f => `- ${f.key}: ${f.error}`).join("\n");
       ui.alert("동기화 완료!\n하지만 일부 문서가 실패했습니다:\n" + messages);
@@ -54,8 +64,47 @@ function triggerChangedSync() {
   }
 }
 
+// ====== 전체 동기화 메뉴 클릭 시 ======
+function triggerFullSync() {
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.alert(
+    "전체 동기화",
+    "시트 전체를 Firestore에 다시 동기화하시겠습니까?",
+    ui.ButtonSet.YES_NO
+  );
+  if (response !== ui.Button.YES) return;
+
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    // 모든 sheet_cache_* 삭제 → 캐시 초기화
+    ss.getSheets().forEach(sheet => {
+      const cacheKey = `sheet_cache_${sheet.getName()}`;
+      PropertiesService.getScriptProperties().deleteProperty(cacheKey);
+    });
+
+    // 기존 syncChangedRows() 재사용
+    const result = syncChangedRows(ss);
+    if (result.failedDocs && result.failedDocs.length > 0) {
+      const messages = result.failedDocs.map(f => `- ${f.key}: ${f.error}`).join("\n");
+      ui.alert("전체 동기화 완료!\n하지만 일부 문서가 실패했습니다:\n" + messages);
+    } else {
+      ui.alert("전체 동기화 완료! 모든 문서가 성공했습니다.");
+    }
+  } catch (err) {
+    ui.alert("전체 동기화 실패: " + err.message);
+  }
+}
+
+// ====== 메뉴 클릭 시 삭제 ======
 function triggerDelete() {
   const ui = SpreadsheetApp.getUi();
+  const response = ui.alert(
+    "Firestore 삭제",
+    "시트에 없는 Firestore 데이터를 삭제하시겠습니까?",
+    ui.ButtonSet.YES_NO
+  );
+  if (response !== ui.Button.YES) return;
+
   try {
     callWebApp("deleteMissing");
     ui.alert("삭제 완료!");
@@ -64,7 +113,7 @@ function triggerDelete() {
   }
 }
 
-// ====== 웹앱 엔드포인트 (소유자 권한 실행) ======
+// ====== 웹앱 엔드포인트 ======
 function doPost(e) {
   const action = e.parameter.action;
 
@@ -204,6 +253,7 @@ function syncChangedRows(ss) {
       }
 
       const currentHash = JSON.stringify(fields);
+      // 캐시 없거나 다르면 Firestore에 쓰기
       if (!cachedData[key] || cachedData[key] !== currentHash) {
         const docPath = `projects/${FIRESTORE_PROJECT}/databases/(default)/documents/${COLLECTION}/${key}`;
         writes.push({ update: { name: docPath, fields } });
@@ -348,6 +398,7 @@ function deleteMissingFromFirestore() {
           });
           deleted = true;
 
+          // 캐시에서도 삭제
           for (const sheetName in sheetCacheMap) {
             if (sheetCacheMap[sheetName][docId]) {
               delete sheetCacheMap[sheetName][docId];
@@ -368,7 +419,6 @@ function deleteMissingFromFirestore() {
     Logger.log(`Batch ${batchNumber} deleted: ${docsToDelete.length - failedDocs.length} docs, failed: ${failedDocs.length}`);
 
     Utilities.sleep(waitMs);
-
     nextPageToken = json.nextPageToken || null;
   } while (nextPageToken);
 
