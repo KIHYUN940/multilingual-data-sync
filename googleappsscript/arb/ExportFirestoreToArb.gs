@@ -4,6 +4,7 @@
  * 새로운 언어 추가 시 코드 수정 없이 자동 처리
  * Flutter 표준 ARB 구조: @@locale 포함
  * 각 언어별 app_<lang>.arb 생성
+ * Description 필드 지원 ("@key": { "description": "..." })
  */
 
 // ===== 환경 변수 =====
@@ -13,12 +14,6 @@ function getConfig(key) {
   if (!value) throw new Error(`${key} 환경변수가 설정되지 않았습니다.`);
   return value;
 }
-
-// 환경 변수 예시
-// FIRESTORE_PROJECT : Firestore 프로젝트 ID
-// COLLECTION        : 변환할 컬렉션 이름
-// ARB_FOLDER_ID     : 구글 드라이브 ARB 파일 저장 폴더 ID
-// SERVICE_ACCOUNT_FILE_ID : 서비스 계정 JSON 파일 ID (Drive에 업로드)
 
 // ===== 메인 함수 =====
 function generateArbFiles() {
@@ -30,7 +25,7 @@ function generateArbFiles() {
   const token = getOAuthToken_();
   let pageToken = null;
 
-  const arbData = {}; // 언어 동적 처리
+  const arbData = {}; // 언어별 누적 데이터
 
   do {
     // Firestore REST API 호출
@@ -48,40 +43,54 @@ function generateArbFiles() {
     const json = JSON.parse(response.getContentText());
     const docs = json.documents || [];
 
+    // ===== 문서 단위 처리 =====
     docs.forEach(doc => {
       if (!doc.fields) return;
       const fields = doc.fields;
 
-      // 문서 ID 또는 Key를 ARB key로 사용
+      // 문서 ID 또는 Key 필드 사용
       const key = getFieldValue(fields.Key) || doc.name.split("/").pop();
       if (!key) return;
 
-      // ===== 동적 언어 처리 =====
+      // Description 필드 추가
+      const description = getFieldValue(fields.Description) || "";
+
+      // ===== 언어별 필드 자동 인식 =====
       for (const fieldName in fields) {
         const match = fieldName.match(/^(Value|Text|Options)_(.+)$/);
         if (!match) continue;
+
         const type = match[1];         // Value / Text / Options
         const lang = match[2].toLowerCase(); // ko, en, mn, jp 등
+        const keyName = type === "Options" ? key + "_options" : key;
+        const val = getFieldValue(fields[fieldName]);
 
         if (!arbData[lang]) arbData[lang] = {};
 
-        const val = getFieldValue(fields[fieldName]);
-        const keyName = type === "Options" ? key + "_options" : key;
-
+        // 실제 번역 값 추가
         arbData[lang][keyName] = val;
+
+        // description 추가
+        if (description) {
+          const metaKey = "@" + keyName;
+          if (!arbData[lang][metaKey]) {
+            arbData[lang][metaKey] = { description };
+          }
+        }
       }
     });
 
     pageToken = json.nextPageToken || null;
   } while (pageToken);
 
-  // ===== ARB 파일 저장 =====
+  // ===== 언어별 ARB 파일 저장 =====
   for (const lang in arbData) {
-    const dataWithLocale = { "@@locale": lang, ...arbData[lang] }; // @@locale 포함
+    const dataWithLocale = { "@@locale": lang, ...arbData[lang] };
     saveArbFile(folder, `app_${lang}.arb`, dataWithLocale);
   }
 
-  Logger.log("Firestore → ARB 변환 완료! 생성된 언어: " + Object.keys(arbData).join(", "));
+  Logger.log("Firestore → ARB 변환 완료!");
+  Logger.log("생성된 언어 목록: " + Object.keys(arbData).join(", "));
 }
 
 // ===== 필드 값 안전 추출 =====
