@@ -9,7 +9,7 @@
 // Script Properties에 아래 키/값을 등록
 // FIRESTORE_PROJECT = your-project-id
 // COLLECTION = your-collection-name
-// SERVICE_ACCOUNT_FILE_ID = your-service-account-file-id
+// SERVICE_ACCOUNT_JSON = your-service-account-json (전체 문자열)
 // WEBAPP_URL = your-webapp-url
 
 function getConfig(key) {
@@ -143,7 +143,7 @@ function sanitizeFirestoreKey(key) {
     .replace(/[^a-zA-Z0-9_\-]/g, "");
 }
 
-// ====== OAuth2 토큰 생성 ======
+// ====== OAuth2 토큰 생성 (환경변수 기반 서비스 계정 JSON) ======
 function getOAuthToken_() {
   const props = PropertiesService.getScriptProperties();
   const cached = props.getProperty('FIRESTORE_OAUTH');
@@ -154,10 +154,9 @@ function getOAuthToken_() {
     } catch(e) {}
   }
 
-  const SERVICE_ACCOUNT_FILE_ID = getConfig("SERVICE_ACCOUNT_FILE_ID");
-  const serviceAccount = JSON.parse(
-    DriveApp.getFileById(SERVICE_ACCOUNT_FILE_ID).getBlob().getDataAsString()
-  );
+  // ===== 환경변수에서 JSON 바로 가져오기 =====
+  const serviceAccountStr = getConfig("SERVICE_ACCOUNT_JSON");
+  const serviceAccount = JSON.parse(serviceAccountStr);
 
   const privateKey = serviceAccount.private_key;
   const clientEmail = serviceAccount.client_email;
