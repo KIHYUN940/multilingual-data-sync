@@ -267,7 +267,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ),
                 _buildMenuButton(
                   icon: Icons.settings,
-                  label: getText("TranslationManagement"),
+                  label: getText("translationManagement"),
                   onTap: () {
                     Navigator.push(
                       context,
