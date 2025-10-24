@@ -29,6 +29,25 @@
 
 ---
 
+## Firestore → *.arb 파일 변환기 구현
+
+Google Apps Script를 사용하여 Firestore 데이터를 Flutter용 ARB 파일로 자동 변환합니다.  
+이 기능은 **번역 관리 시트와 Firestore 간 동기화 후, Flutter 프로젝트용 다국어 리소스 파일(.arb)을 자동 생성**할 때 사용됩니다.
+
+### 주요 특징
+- Firestore 컬렉션 문서 **최대 1000개씩 조회 및 페이지네이션 처리**  
+- `Value_`, `Text_`, `Options_*` 필드 **자동 인식 및 언어별 구분 처리**  
+- **새로운 언어 추가 시 코드 수정 없이 자동 처리**  
+- Flutter 표준 ARB 구조 (`@@locale` 포함)로 출력  
+- `Description` 필드 지원 → `"@key": { "description": "..." }` 구조 자동 생성  
+- **기존 파일 존재 시 Google Drive에서 자동 덮어쓰기**  
+- Firestore REST API 접근을 위한 **JWT 인증 구현 (서비스 계정 기반)**  
+- **Google Drive 지정 폴더에 `app_<언어>.arb` 파일 자동 저장**  
+
+> ex) `app_ko.arb`, `app_en.arb`, `app_mn.arb` 등 Flutter 다국어 리소스로 바로 사용 가능
+
+---
+
 ## ⚠️ 보안 주의사항
 - `serviceAccountKey.json` 등 **비밀 키 파일은 절대 GitHub에 업로드하지 마세요.**
 - Apps Script 내에서는 **환경변수(`Script Properties`)에 JSON 문자열 형태로만 저장**합니다.
@@ -147,5 +166,4 @@ Google Sheets 메뉴:
 
 ## 참고
 이 프로젝트는 다국어 번역 데이터 외에도 **Firestore를 사용하는 모든 시트 기반 데이터 관리 자동화**에 응용할 수 있습니다.  
-ex: 번역 관리, 동적인 설문지 관리, 설정 동기화, 내부 데이터 검증 등.
-
+ex) 번역 관리, 동적인 설문지 관리, 설정 동기화, 내부 데이터 검증 등.
